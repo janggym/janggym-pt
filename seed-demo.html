@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Demo 데이터 생성</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="config.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #F7F9FC; display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 24px; }
+    .card { background: #fff; border-radius: 16px; box-shadow: 0 2px 14px rgba(0,0,0,.07); padding: 32px; width: 100%; max-width: 480px; }
+    h2 { font-size: 20px; font-weight: 800; margin-bottom: 6px; }
+    .sub { font-size: 13px; color: #718096; margin-bottom: 24px; }
+    .btn { width: 100%; background: #378ADD; color: #fff; border: none; border-radius: 10px; padding: 14px; font-size: 15px; font-weight: 700; font-family: inherit; cursor: pointer; transition: opacity .15s; }
+    .btn:hover { opacity: .88; }
+    .btn:disabled { opacity: .5; cursor: not-allowed; }
+    .log { background: #F7F9FC; border-radius: 10px; padding: 16px; margin-top: 20px; font-size: 13px; color: #2D3748; line-height: 1.8; white-space: pre-wrap; min-height: 60px; display: none; }
+    .log.show { display: block; }
+    .go-btn { display: none; width: 100%; background: #27AE60; color: #fff; border: none; border-radius: 10px; padding: 14px; font-size: 15px; font-weight: 700; font-family: inherit; cursor: pointer; margin-top: 12px; transition: opacity .15s; text-align: center; text-decoration: none; }
+    .go-btn.show { display: block; }
+    .go-btn:hover { opacity: .88; }
+    .warn { background: #FFFBEB; border: 1px solid #FDE68A; border-radius: 8px; padding: 10px 14px; font-size: 12px; color: #92400E; margin-bottom: 20px; }
+  </style>
+</head>
+<body>
+<div class="card">
+  <h2>🌱 Demo 데이터 생성</h2>
+  <p class="sub">홍길동 회원의 예시 데이터를 Supabase에 삽입합니다.</p>
+  <div class="warn">⚠️ 이미 홍길동 데이터가 있으면 새로 추가되지 않습니다. 버튼은 한 번만 누르세요.</div>
+  <button class="btn" id="seed-btn" onclick="seedAll()">데모 데이터 생성하기</button>
+  <div class="log" id="log"></div>
+  <a class="go-btn" id="go-btn" href="report.html?m=홍길동" target="_blank">👀 홍길동 리포트 보기 →</a>
+</div>
+
+<script>
+const logEl   = document.getElementById('log');
+const seedBtn = document.getElementById('seed-btn');
+const goBtn   = document.getElementById('go-btn');
+
+function log(msg) {
+  logEl.classList.add('show');
+  logEl.textContent += msg + '\n';
+}
+
+function daysAgo(n) {
+  const d = new Date();
+  d.setDate(d.getDate() - n);
+  return d.toISOString().split('T')[0];
+}
+
+async function seedAll() {
+  seedBtn.disabled = true;
+  seedBtn.textContent = '생성 중...';
+  logEl.textContent = '';
+
+  /* ── 1. 회원 ── */
+  log('👤 회원 확인 중...');
+  const { data: existing } = await db.from('members').select('id').eq('name', '홍길동').maybeSingle();
+  let mid;
+  if (existing) {
+    mid = existing.id;
+    log(`   이미 존재합니다 (ID: ${mid})`);
+  } else {
+    const { data: m, error } = await db.from('members').insert({
+      name: '홍길동', phone: '010-1234-5678',
+      memo: '목표: 체중 5kg 감량 + 근력 향상. 직장인(야근 多)'
+    }).select().single();
+    if (error) { log('오류: ' + error.message); seedBtn.disabled = false; seedBtn.textContent = '데모 데이터 생성하기'; return; }
+    mid = m.id;
+    log(`   생성 완료 (ID: ${mid})`);
+  }
+
+  /* ── 2. 체크인 ── */
+  log('📝 체크인 삽입 중...');
+  const { error: ciErr } = await db.from('checkins').upsert({
+    member_id: mid, date: daysAgo(0),
+    exercise_type: '수업', exercise_memo: '하체 집중 — 스쿼트·런지·레그프레스',
+    sleep_score: 4, sleep_memo: '어제 일찍 자서 숙면했어요',
+    pain: '없음',
+    diet_score: 3, diet_memo: '점심 과식, 저녁은 닭가슴살',
+    message_to_trainer: '스쿼트 후 무릎이 약간 뻐근합니다. 다음 번에 확인 부탁드려요!'
+  }, { onConflict: 'member_id,date' });
+  if (ciErr) log('   오류: ' + ciErr.message); else log('   완료');
+
+  /* ── 3. 인바디 기록 (8주치) ── */
+  log('📊 인바디 기록 삽입 중...');
+  const { data: existingBody } = await db.from('body_records').select('id').eq('member_id', mid).limit(1);
+  if (existingBody?.length) {
+    log('   이미 존재합니다. 건너뜀.');
+  } else {
+    const bodyRows = [
+      { days: 49, weight: 80.0, fat_pct: 24.0, muscle_kg: 34.0 },
+      { days: 42, weight: 78.8, fat_pct: 23.5, muscle_kg: 34.3 },
+      { days: 35, weight: 78.1, fat_pct: 23.1, muscle_kg: 34.7 },
+      { days: 28, weight: 77.4, fat_pct: 22.8, muscle_kg: 35.0 },
+      { days: 21, weight: 76.9, fat_pct: 22.5, muscle_kg: 35.3 },
+      { days: 14, weight: 76.2, fat_pct: 22.1, muscle_kg: 35.6 },
+      { days:  7, weight: 75.8, fat_pct: 21.8, muscle_kg: 35.9 },
+      { days:  0, weight: 75.2, fat_pct: 21.4, muscle_kg: 36.2 },
+    ];
+    const { error: bErr } = await db.from('body_records').insert(
+      bodyRows.map(r => ({
+        member_id: mid, date: daysAgo(r.days),
+        weight: r.weight, fat_pct: r.fat_pct, muscle_kg: r.muscle_kg,
+        weight_goal: 70, fat_goal: 18, muscle_goal: 38
+      }))
+    );
+    if (bErr) log('   오류: ' + bErr.message); else log('   8건 완료');
+  }
+
+  /* ── 4. 1RM 기록 (2회차) ── */
+  log('💪 1RM 기록 삽입 중...');
+  const { data: existingOrm } = await db.from('one_rm_records').select('id').eq('member_id', mid).limit(1);
+  if (existingOrm?.length) {
+    log('   이미 존재합니다. 건너뜀.');
+  } else {
+    await db.from('one_rm_records').insert([
+      {
+        member_id: mid, date: daysAgo(42),
+        squat: 80, deadlift: 100, bench: 70,
+        squat_goal: 100, deadlift_goal: 130, bench_goal: 90
+      },
+      {
+        member_id: mid, date: daysAgo(7),
+        squat: 90, deadlift: 110, bench: 75,
+        squat_goal: 100, deadlift_goal: 130, bench_goal: 90
+      }
+    ]);
+    log('   2건 완료');
+  }
+
+  /* ── 5. 주간 리포트 ── */
+  log('📋 주간 리포트 삽입 중...');
+  const { error: rptErr } = await db.from('weekly_reports').upsert({
+    member_id: mid,
+    date: daysAgo(0),
+    summary: '체지방 감소 + 근육량 증가, 스쿼트 10kg 향상으로 순항 중! 이상적인 재성분 변화입니다 🎯',
+    last_session: {
+      date: daysAgo(3),
+      title: '하체 집중 트레이닝 (스쿼트 / 런지 / 레그컬)',
+      type: '근비대',
+      good: '스쿼트 깊이와 무릎 방향이 크게 개선됨. 90kg 3세트 완주!',
+      check: '무릎이 안쪽으로 쏠리는 경향 — 힙 외전근 약화 의심',
+      next: '다음 세션 데드리프트 115kg 도전 + 클램쉘 워밍업 추가'
+    },
+    changes_3session: [
+      '스쿼트 80kg → 90kg 달성 — 3세션 만에 10kg 향상',
+      '체지방률 22.5% → 21.4% 감소, 골격근량 35.3 → 36.2kg 증가',
+      '운동 후 근육통 회복 속도가 눈에 띄게 빨라짐'
+    ],
+    recurring_issues: [
+      {
+        title: '스쿼트 시 무릎 안쪽 쏠림',
+        body: '힙 외전근(중둔근) 약화가 원인으로 보임. 클램쉘·사이드워크 워밍업으로 매 세션 활성화 중'
+      },
+      {
+        title: '야근 후 식단 관리 어려움',
+        body: '주 2~3회 야근으로 저녁 식사가 불규칙. 고단백 간편식(닭가슴살 큐브·그릭요거트) 리스트 공유 예정'
+      }
+    ],
+    coach_summary: '꾸준한 노력이 결실을 맺고 있습니다! 8주 만에 체중 4.8kg 감량 + 근육 2.2kg 증가라는 이상적인 재성분 변화를 이뤄냈습니다.',
+    coach_detail: '스쿼트 중량이 8주 전 대비 +10kg 향상되었고, 인바디 수치도 목표 방향으로 꾸준히 개선되고 있습니다. 체지방률은 24.0%에서 21.4%로 2.6%p 낮아졌으며, 골격근량은 34.0kg에서 36.2kg으로 증가했습니다.\n\n다음 2주는 유산소를 주 2회 추가해 체지방 감소에 가속도를 붙이면서, 동시에 데드리프트 폼 완성도를 높여 130kg 목표를 향해 단계적으로 접근하겠습니다. 무릎 안정성 향상을 위한 힙 외전근 강화도 병행합니다.',
+    next_step1_title: '힙 외전근 강화 루틴 도입',
+    next_step1_body: '매 세션 워밍업에 클램쉘 + 사이드라잉 힙 어브덕션 각 15회 3세트 추가 — 스쿼트 무릎 안정성 목표',
+    next_step2_title: '유산소 주 2회 추가',
+    next_step2_body: '인클라인 트레드밀 20분 또는 실내 사이클 30분 (심박 130~150bpm 유지) — 체지방 감소 가속화',
+    next_step3_title: '단백질 섭취 목표 설정',
+    next_step3_body: '하루 체중 × 1g 기준 75g 이상 섭취 — 근육 유지 및 회복력 향상을 위해 매 끼니 단백질 30g 확보'
+  }, { onConflict: 'member_id,date' });
+  if (rptErr) log('   오류: ' + rptErr.message); else log('   완료');
+
+  /* ── Done ── */
+  log('\n✅ 모든 데이터 삽입 완료!');
+  seedBtn.textContent = '완료 ✓';
+  goBtn.classList.add('show');
+}
+</script>
+</body>
+</html>

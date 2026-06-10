@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PT Manager — 회원 목록</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="config.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --blue:#378ADD; --blue-lt:#EBF5FF;
+      --green:#27AE60; --green-lt:#E8F8F1;
+      --gray:#718096; --border:#E2E8F0;
+      --bg:#F7F9FC; --shadow:0 2px 14px rgba(0,0,0,.07); --r:12px;
+    }
+    body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; background:var(--bg); color:#1A202C; font-size:15px; display:flex; min-height:100vh; }
+    .sb { width:200px; background:#1A1F36; color:#fff; display:flex; flex-direction:column; padding:24px 0; flex-shrink:0; position:fixed; top:0; left:0; height:100vh; }
+    .sb-logo { font-size:16px; font-weight:800; padding:0 20px 24px; border-bottom:1px solid rgba(255,255,255,.1); }
+    .sb-logo span { color:var(--blue); }
+    .sb-nav { padding:16px 12px; }
+    .sb-link { display:flex; align-items:center; gap:8px; padding:10px 12px; border-radius:8px; color:rgba(255,255,255,.65); text-decoration:none; font-size:14px; font-weight:500; margin-bottom:2px; transition:.15s; }
+    .sb-link:hover,.sb-link.active { background:rgba(255,255,255,.1); color:#fff; }
+    .main { margin-left:200px; flex:1; padding:28px; }
+    .pg-hd { display:flex; align-items:center; justify-content:space-between; margin-bottom:20px; }
+    .pg-title { font-size:22px; font-weight:800; }
+    .btn { background:var(--blue); color:#fff; border:none; border-radius:8px; padding:9px 18px; font-size:14px; font-weight:600; font-family:inherit; cursor:pointer; }
+    .btn:hover { opacity:.88; }
+    .btn-sm { padding:5px 12px; font-size:12px; border-radius:6px; }
+    .btn-outline { background:none; border:1.5px solid var(--border); color:#4A5568; }
+    .btn-outline:hover { border-color:var(--blue); color:var(--blue); }
+    .search-row { display:flex; gap:10px; margin-bottom:16px; }
+    .field { width:100%; border:1.5px solid var(--border); border-radius:8px; padding:9px 13px; font-size:14px; font-family:inherit; outline:none; background:#fff; transition:border-color .15s; }
+    .field:focus { border-color:var(--blue); }
+    .card { background:#fff; border-radius:var(--r); box-shadow:var(--shadow); overflow:hidden; }
+    table { width:100%; border-collapse:collapse; font-size:13px; }
+    th { text-align:left; padding:7px 14px; font-size:11px; font-weight:700; color:var(--gray); text-transform:uppercase; letter-spacing:.4px; border-bottom:1px solid var(--border); }
+    td { padding:11px 14px; border-bottom:1px solid var(--border); vertical-align:middle; }
+    tr:last-child td { border-bottom:none; }
+    tr:hover td { background:#FAFBFC; }
+    a.link { color:var(--blue); text-decoration:none; font-weight:500; font-size:12px; }
+    a.link:hover { text-decoration:underline; }
+    .empty { text-align:center; color:var(--gray); padding:40px; }
+
+    /* Modal */
+    .overlay { position:fixed; inset:0; background:rgba(0,0,0,.4); display:none; align-items:center; justify-content:center; z-index:200; }
+    .overlay.show { display:flex; }
+    .modal { background:#fff; border-radius:16px; padding:28px; width:420px; max-width:90vw; }
+    .modal h3 { font-size:17px; font-weight:800; margin-bottom:18px; }
+    .form-group { margin-bottom:14px; }
+    .form-group label { display:block; font-size:12px; color:var(--gray); margin-bottom:5px; }
+    .modal-footer { display:flex; gap:10px; justify-content:flex-end; margin-top:20px; }
+    .flash { background:var(--green-lt); border:1px solid #A8E6C5; border-radius:8px; padding:10px 14px; font-size:13px; color:#1a7a4a; margin-bottom:14px; display:none; }
+  </style>
+</head>
+<body>
+
+<aside class="sb">
+  <div class="sb-logo">PT <span>Manager</span></div>
+  <nav class="sb-nav">
+    <a href="index.html" class="sb-link">📊 대시보드</a>
+    <a href="members.html" class="sb-link active">👥 회원 목록</a>
+  </nav>
+</aside>
+
+<div class="main">
+  <div class="pg-hd">
+    <div class="pg-title">회원 목록</div>
+    <button class="btn" onclick="openModal()">+ 회원 등록</button>
+  </div>
+  <div id="flash" class="flash"></div>
+
+  <div class="search-row">
+    <input id="search" class="field" style="max-width:300px;" placeholder="이름 또는 전화번호 검색" oninput="renderTable()">
+  </div>
+
+  <div class="card">
+    <table>
+      <thead>
+        <tr><th>이름</th><th>전화번호</th><th>메모</th><th>Google Sheets</th><th>마지막 체크인</th><th>등록일</th><th>링크</th></tr>
+      </thead>
+      <tbody id="tbl-body"><tr><td colspan="7" class="empty">불러오는 중...</td></tr></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- 회원 등록 모달 -->
+<div class="overlay" id="modal">
+  <div class="modal">
+    <h3>회원 등록</h3>
+    <form id="add-form">
+      <div class="form-group">
+        <label>이름 *</label>
+        <input id="f-name" class="field" required placeholder="홍길동">
+      </div>
+      <div class="form-group">
+        <label>전화번호</label>
+        <input id="f-phone" class="field" placeholder="010-0000-0000">
+      </div>
+      <div class="form-group">
+        <label>메모</label>
+        <textarea id="f-memo" class="field" rows="2" placeholder="목표, 특이사항 등"></textarea>
+      </div>
+      <div class="form-group">
+        <label>Google Sheets ID <span style="font-weight:400;color:var(--gray);">(운동 프로그램)</span></label>
+        <input id="f-sheets-id" class="field" placeholder="스프레드시트 ID 붙여넣기">
+        <div style="font-size:11px;color:var(--gray);margin-top:4px;">URL에서 /d/ 뒤 ~ /edit 앞 부분</div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline" onclick="closeModal()">취소</button>
+        <button type="submit" class="btn">등록</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- 회원 편집 모달 -->
+<div class="overlay" id="edit-modal">
+  <div class="modal">
+    <h3>회원 편집</h3>
+    <form id="edit-form">
+      <input type="hidden" id="ef-id">
+      <div class="form-group">
+        <label>이름 *</label>
+        <input id="ef-name" class="field" required>
+      </div>
+      <div class="form-group">
+        <label>전화번호</label>
+        <input id="ef-phone" class="field" placeholder="010-0000-0000">
+      </div>
+      <div class="form-group">
+        <label>메모</label>
+        <textarea id="ef-memo" class="field" rows="2"></textarea>
+      </div>
+      <div class="form-group">
+        <label>Google Sheets ID <span style="font-weight:400;color:var(--gray);">(운동 프로그램)</span></label>
+        <input id="ef-sheets-id" class="field" placeholder="스프레드시트 ID 붙여넣기">
+        <div style="font-size:11px;color:var(--gray);margin-top:4px;">URL에서 /d/ 뒤 ~ /edit 앞 부분</div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline" style="color:#E53E3E;border-color:#E53E3E;" onclick="deleteMember()">삭제</button>
+        <button type="button" class="btn btn-outline" onclick="closeEditModal()">취소</button>
+        <button type="submit" class="btn">저장</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+let members = [];
+let lastCI  = {};
+
+async function load() {
+  const { data: mData } = await db.from('members').select('*').order('name');
+  members = mData || [];
+
+  if (members.length) {
+    const ids = members.map(m => m.id);
+    const { data: ciData } = await db.from('checkins')
+      .select('member_id, date')
+      .in('member_id', ids)
+      .order('date', { ascending: false });
+
+    (ciData || []).forEach(c => {
+      if (!lastCI[c.member_id]) lastCI[c.member_id] = c.date;
+    });
+  }
+  renderTable();
+}
+
+function renderTable() {
+  const q = document.getElementById('search').value.trim();
+  const rows = q
+    ? members.filter(m => m.name.includes(q) || (m.phone || '').includes(q))
+    : members;
+
+  const tbody = document.getElementById('tbl-body');
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="6" class="empty">회원이 없습니다.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = rows.map(m => `
+    <tr>
+      <td><strong>${m.name}</strong></td>
+      <td>${m.phone || '—'}</td>
+      <td style="color:var(--gray);font-size:12px;max-width:180px;">${m.memo || ''}</td>
+      <td style="font-size:12px;">
+        ${m.sheets_id
+          ? `<span style="color:var(--green);font-weight:600;">✓ 연결됨</span>`
+          : `<span style="color:var(--gray);">—</span>`}
+      </td>
+      <td style="color:var(--gray);font-size:13px;">${lastCI[m.id] || '—'}</td>
+      <td style="color:var(--gray);font-size:12px;">${m.created_at ? m.created_at.slice(0,10) : ''}</td>
+      <td style="display:flex;gap:8px;flex-wrap:wrap;">
+        <a class="link" href="checkin.html?m=${encodeURIComponent(m.name)}">체크인</a>
+        <a class="link" href="report.html?m=${encodeURIComponent(m.name)}">리포트</a>
+        <a class="link" href="report-edit.html?m=${encodeURIComponent(m.name)}">수정</a>
+        <a class="link" href="#" onclick="openEditModal(${m.id});return false;">편집</a>
+      </td>
+    </tr>`).join('');
+}
+
+function openModal()  { document.getElementById('modal').classList.add('show'); }
+function closeModal() { document.getElementById('modal').classList.remove('show'); document.getElementById('add-form').reset(); }
+
+document.getElementById('modal').addEventListener('click', e => {
+  if (e.target === document.getElementById('modal')) closeModal();
+});
+
+document.getElementById('add-form').addEventListener('submit', async e => {
+  e.preventDefault();
+  const name      = document.getElementById('f-name').value.trim();
+  const phone     = document.getElementById('f-phone').value.trim();
+  const memo      = document.getElementById('f-memo').value.trim();
+  const sheets_id = document.getElementById('f-sheets-id').value.trim() || null;
+  if (!name) return;
+
+  const { error } = await db.from('members').insert({ name, phone, memo, sheets_id });
+  if (error) { alert('오류: ' + error.message); return; }
+
+  closeModal();
+  showFlash(`${name} 님이 등록되었습니다.`);
+  lastCI = {};
+  await load();
+});
+
+function openEditModal(id) {
+  const m = members.find(m => m.id === id);
+  if (!m) return;
+  document.getElementById('ef-id').value       = m.id;
+  document.getElementById('ef-name').value     = m.name;
+  document.getElementById('ef-phone').value    = m.phone || '';
+  document.getElementById('ef-memo').value     = m.memo || '';
+  document.getElementById('ef-sheets-id').value = m.sheets_id || '';
+  document.getElementById('edit-modal').classList.add('show');
+}
+
+function closeEditModal() {
+  document.getElementById('edit-modal').classList.remove('show');
+}
+
+document.getElementById('edit-modal').addEventListener('click', e => {
+  if (e.target === document.getElementById('edit-modal')) closeEditModal();
+});
+
+document.getElementById('edit-form').addEventListener('submit', async e => {
+  e.preventDefault();
+  const id        = +document.getElementById('ef-id').value;
+  const name      = document.getElementById('ef-name').value.trim();
+  const phone     = document.getElementById('ef-phone').value.trim();
+  const memo      = document.getElementById('ef-memo').value.trim();
+  const sheets_id = document.getElementById('ef-sheets-id').value.trim() || null;
+  if (!name) return;
+
+  const { error } = await db.from('members').update({ name, phone, memo, sheets_id }).eq('id', id);
+  if (error) { alert('오류: ' + error.message); return; }
+
+  closeEditModal();
+  showFlash(`${name} 님 정보가 저장되었습니다.`);
+  lastCI = {};
+  await load();
+});
+
+async function deleteMember() {
+  const id   = +document.getElementById('ef-id').value;
+  const name = document.getElementById('ef-name').value.trim();
+  if (!confirm(`${name} 님을 삭제하시겠습니까? 모든 데이터가 함께 삭제됩니다.`)) return;
+
+  const { error } = await db.from('members').delete().eq('id', id);
+  if (error) { alert('오류: ' + error.message); return; }
+
+  closeEditModal();
+  showFlash(`${name} 님이 삭제되었습니다.`);
+  lastCI = {};
+  await load();
+}
+
+function showFlash(msg) {
+  const flash = document.getElementById('flash');
+  flash.textContent = msg;
+  flash.style.display = 'block';
+  setTimeout(() => flash.style.display = 'none', 3500);
+}
+
+load();
+</script>
+</body>
+</html>

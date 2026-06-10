@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>리포트 작성</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="config.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --blue:#378ADD; --blue-lt:#EBF5FF;
+      --green:#27AE60; --green-lt:#E8F8F1;
+      --gray:#718096; --border:#E2E8F0;
+      --bg:#F7F9FC; --shadow:0 2px 14px rgba(0,0,0,.07); --r:12px;
+    }
+    body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; background:var(--bg); color:#1A202C; font-size:15px; display:flex; min-height:100vh; }
+    .sb { width:200px; background:#1A1F36; color:#fff; display:flex; flex-direction:column; padding:24px 0; flex-shrink:0; position:fixed; top:0; left:0; height:100vh; }
+    .sb-logo { font-size:16px; font-weight:800; padding:0 20px 24px; border-bottom:1px solid rgba(255,255,255,.1); }
+    .sb-logo span { color:var(--blue); }
+    .sb-nav { padding:16px 12px; }
+    .sb-link { display:flex; align-items:center; gap:8px; padding:10px 12px; border-radius:8px; color:rgba(255,255,255,.65); text-decoration:none; font-size:14px; font-weight:500; margin-bottom:2px; transition:.15s; }
+    .sb-link:hover,.sb-link.active { background:rgba(255,255,255,.1); color:#fff; }
+    .main { margin-left:200px; flex:1; padding:28px; max-width:860px; }
+    .pg-hd { display:flex; align-items:center; gap:14px; margin-bottom:24px; flex-wrap:wrap; }
+    .pg-title { font-size:22px; font-weight:800; }
+    .pg-sub { font-size:13px; color:var(--gray); }
+    .btn { background:var(--blue); color:#fff; border:none; border-radius:8px; padding:9px 20px; font-size:14px; font-weight:600; font-family:inherit; cursor:pointer; }
+    .btn:hover { opacity:.88; }
+    .btn-view { background:none; border:1.5px solid var(--border); color:#4A5568; }
+    .btn-view:hover { border-color:var(--blue); color:var(--blue); }
+    .card { background:#fff; border-radius:var(--r); box-shadow:var(--shadow); margin-bottom:16px; overflow:hidden; }
+    .card-hd { display:flex; align-items:center; gap:10px; padding:14px 18px; border-bottom:1px solid var(--border); }
+    .card-hd h2 { font-size:14px; font-weight:700; flex:1; }
+    .card-bd { padding:20px 18px; }
+    .grid-2 { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+    .grid-3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:14px; }
+    .form-group { display:flex; flex-direction:column; gap:5px; }
+    .form-group label { font-size:12px; color:var(--gray); font-weight:600; }
+    .field { width:100%; border:1.5px solid var(--border); border-radius:8px; padding:9px 12px; font-size:14px; font-family:inherit; outline:none; transition:border-color .15s; background:#fff; }
+    .field:focus { border-color:var(--blue); }
+    textarea.field { resize:vertical; min-height:70px; }
+    .section-title { font-size:12px; font-weight:700; color:var(--blue); text-transform:uppercase; letter-spacing:.4px; margin-bottom:12px; }
+    .divider { border:none; border-top:1px solid var(--border); margin:16px 0; }
+    .save-bar { position:fixed; bottom:0; left:200px; right:0; background:#fff; border-top:1px solid var(--border); padding:14px 28px; display:flex; align-items:center; gap:12px; z-index:100; }
+    .save-status { font-size:13px; color:var(--gray); }
+    .flash { background:var(--green-lt); border:1px solid #A8E6C5; color:#1a7a4a; border-radius:8px; padding:6px 14px; font-size:13px; display:none; }
+    .orm-group { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+    .orm-group label { font-size:11px; color:var(--gray); }
+    @media(max-width:700px){.grid-2,.grid-3{grid-template-columns:1fr;}.main{margin-left:0;padding:16px 12px 80px;}.sb{display:none;}.save-bar{left:0;}}
+  </style>
+</head>
+<body>
+
+<aside class="sb">
+  <div class="sb-logo">PT <span>Manager</span></div>
+  <nav class="sb-nav">
+    <a href="index.html" class="sb-link">📊 대시보드</a>
+    <a href="members.html" class="sb-link">👥 회원 목록</a>
+  </nav>
+</aside>
+
+<div class="main">
+  <div id="pg-content"><div style="padding:40px;color:var(--gray);text-align:center;">불러오는 중...</div></div>
+</div>
+
+<div class="save-bar">
+  <button class="btn" onclick="saveAll()">💾 저장하기</button>
+  <button class="btn btn-view" id="view-btn" style="display:none">리포트 보기</button>
+  <span class="save-status" id="save-status"></span>
+  <span class="flash" id="flash">저장 완료!</span>
+</div>
+
+<script>
+const params = new URLSearchParams(location.search);
+const memberName = (params.get('m') || '').trim();
+let member, latestOrm, latestBody, latestRpt;
+
+async function init() {
+  if (!memberName) { document.getElementById('pg-content').innerHTML = '<p style="color:red;padding:40px;">URL에 ?m=이름 을 붙여주세요.</p>'; return; }
+
+  const { data: mData } = await db.from('members').select('*').eq('name', memberName).maybeSingle();
+  if (!mData) { document.getElementById('pg-content').innerHTML = `<p style="color:red;padding:40px;">'${memberName}' 회원을 찾을 수 없습니다.</p>`; return; }
+  member = mData;
+
+  const [r1,r2,r3] = await Promise.all([
+    db.from('one_rm_records').select('*').eq('member_id',member.id).order('date',{ascending:false}).limit(1).maybeSingle(),
+    db.from('body_records').select('*').eq('member_id',member.id).order('date',{ascending:false}).limit(1).maybeSingle(),
+    db.from('weekly_reports').select('*').eq('member_id',member.id).order('date',{ascending:false}).limit(1).maybeSingle(),
+  ]);
+  latestOrm  = r1.data;
+  latestBody = r2.data;
+  latestRpt  = r3.data;
+
+  renderForm();
+  document.getElementById('view-btn').style.display = 'inline-block';
+  document.getElementById('view-btn').onclick = () => window.open(`report.html?m=${encodeURIComponent(member.name)}`, '_blank');
+}
+
+function v(obj, key, def='') { return obj?.[key] ?? def; }
+function ls(obj, key)  { return obj?.last_session?.[key] || ''; }
+function ch(obj, i)    { return obj?.changes_3session?.[i] || ''; }
+function ri(obj, i, k) { return obj?.recurring_issues?.[i]?.[k] || ''; }
+
+function renderForm() {
+  const t = today();
+  document.getElementById('pg-content').innerHTML = `
+    <div class="pg-hd">
+      <div class="pg-title">${member.name} 님 리포트 작성</div>
+      <div class="pg-sub">저장하면 리포트 페이지에 즉시 반영됩니다.</div>
+    </div>
+
+    <!-- 1RM -->
+    <div class="card">
+      <div class="card-hd"><h2>🏋️ 1RM 기록</h2></div>
+      <div class="card-bd">
+        <div class="form-group" style="margin-bottom:14px;">
+          <label>측정일</label>
+          <input type="date" id="orm-date" class="field" style="max-width:200px;" value="${v(latestOrm,'date',t)}">
+        </div>
+        <div class="section-title">현재 1RM</div>
+        <div class="grid-3" style="margin-bottom:16px;">
+          <div class="form-group"><label>스쿼트 (kg)</label><input type="number" id="squat" class="field" step="0.5" value="${v(latestOrm,'squat')}"></div>
+          <div class="form-group"><label>데드리프트 (kg)</label><input type="number" id="deadlift" class="field" step="0.5" value="${v(latestOrm,'deadlift')}"></div>
+          <div class="form-group"><label>벤치프레스 (kg)</label><input type="number" id="bench" class="field" step="0.5" value="${v(latestOrm,'bench')}"></div>
+        </div>
+        <div class="section-title">목표 1RM</div>
+        <div class="grid-3">
+          <div class="form-group"><label>스쿼트 목표 (kg)</label><input type="number" id="squat-goal" class="field" step="0.5" value="${v(latestOrm,'squat_goal')}"></div>
+          <div class="form-group"><label>데드리프트 목표 (kg)</label><input type="number" id="deadlift-goal" class="field" step="0.5" value="${v(latestOrm,'deadlift_goal')}"></div>
+          <div class="form-group"><label>벤치프레스 목표 (kg)</label><input type="number" id="bench-goal" class="field" step="0.5" value="${v(latestOrm,'bench_goal')}"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 체성분 -->
+    <div class="card">
+      <div class="card-hd"><h2>📊 체성분 기록</h2></div>
+      <div class="card-bd">
+        <div class="form-group" style="margin-bottom:14px;">
+          <label>측정일</label>
+          <input type="date" id="body-date" class="field" style="max-width:200px;" value="${v(latestBody,'date',t)}">
+        </div>
+        <div class="section-title">현재</div>
+        <div class="grid-3" style="margin-bottom:16px;">
+          <div class="form-group"><label>체중 (kg)</label><input type="number" id="weight" class="field" step="0.1" value="${v(latestBody,'weight')}"></div>
+          <div class="form-group"><label>체지방률 (%)</label><input type="number" id="fat-pct" class="field" step="0.1" value="${v(latestBody,'fat_pct')}"></div>
+          <div class="form-group"><label>골격근량 (kg)</label><input type="number" id="muscle-kg" class="field" step="0.1" value="${v(latestBody,'muscle_kg')}"></div>
+        </div>
+        <div class="section-title">목표</div>
+        <div class="grid-3">
+          <div class="form-group"><label>체중 목표 (kg)</label><input type="number" id="weight-goal" class="field" step="0.1" value="${v(latestBody,'weight_goal')}"></div>
+          <div class="form-group"><label>체지방률 목표 (%)</label><input type="number" id="fat-goal" class="field" step="0.1" value="${v(latestBody,'fat_goal')}"></div>
+          <div class="form-group"><label>골격근량 목표 (kg)</label><input type="number" id="muscle-goal" class="field" step="0.1" value="${v(latestBody,'muscle_goal')}"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 주간 리포트 -->
+    <div class="card">
+      <div class="card-hd"><h2>📋 주간 리포트</h2></div>
+      <div class="card-bd">
+        <div class="form-group" style="margin-bottom:16px;">
+          <label>리포트 날짜</label>
+          <input type="date" id="rpt-date" class="field" style="max-width:200px;" value="${v(latestRpt,'date',t)}">
+        </div>
+        <div class="form-group" style="margin-bottom:16px;">
+          <label>한줄 요약</label>
+          <input type="text" id="summary" class="field" value="${v(latestRpt,'summary')}" placeholder="이번 주 핵심 변화를 한 줄로">
+        </div>
+
+        <div class="section-title">📅 지난 수업</div>
+        <div class="grid-2" style="margin-bottom:12px;">
+          <div class="form-group"><label>수업 날짜</label><input type="date" id="ls-date" class="field" value="${ls(latestRpt,'date')}"></div>
+          <div class="form-group"><label>수업 제목</label><input type="text" id="ls-title" class="field" value="${ls(latestRpt,'title')}" placeholder="하체 집중 — 스쿼트 & RDL"></div>
+        </div>
+        <div class="grid-3" style="margin-bottom:12px;">
+          <div class="form-group"><label>포인트 1</label><input type="text" id="ls-pt1" class="field" value="${ls(latestRpt,'pt1')}"></div>
+          <div class="form-group"><label>포인트 2</label><input type="text" id="ls-pt2" class="field" value="${ls(latestRpt,'pt2')}"></div>
+          <div class="form-group"><label>포인트 3</label><input type="text" id="ls-pt3" class="field" value="${ls(latestRpt,'pt3')}"></div>
+        </div>
+        <div class="grid-2" style="margin-bottom:12px;">
+          <div class="form-group"><label>수업 성격</label><input type="text" id="ls-type" class="field" value="${ls(latestRpt,'type')}" placeholder="근력 위주 복합 하체"></div>
+          <div class="form-group"><label>좋았던 점</label><input type="text" id="ls-good" class="field" value="${ls(latestRpt,'good')}"></div>
+        </div>
+        <div class="grid-2" style="margin-bottom:20px;">
+          <div class="form-group"><label>확인 사항</label><input type="text" id="ls-check" class="field" value="${ls(latestRpt,'check')}"></div>
+          <div class="form-group"><label>다음 연결</label><input type="text" id="ls-next" class="field" value="${ls(latestRpt,'next')}"></div>
+        </div>
+
+        <div class="section-title">📈 3세션 변화</div>
+        <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:20px;">
+          ${[0,1,2].map(i=>`<div class="form-group"><label>변화 ${i+1}</label><input type="text" id="ch${i}" class="field" value="${ch(latestRpt,i)}"></div>`).join('')}
+        </div>
+
+        <div class="section-title">🔍 반복 점검</div>
+        <div style="display:flex;flex-direction:column;gap:12px;margin-bottom:20px;">
+          ${[0,1].map(i=>`
+            <div>
+              <div class="form-group" style="margin-bottom:6px;"><label>점검 ${i+1} 제목</label><input type="text" id="ri${i}-title" class="field" value="${ri(latestRpt,i,'title')}"></div>
+              <div class="form-group"><label>점검 ${i+1} 설명</label><textarea id="ri${i}-body" class="field">${ri(latestRpt,i,'body')}</textarea></div>
+            </div>`).join('')}
+        </div>
+
+        <div class="section-title">💡 트레이너 코멘트</div>
+        <div class="form-group" style="margin-bottom:10px;">
+          <label>핵심 한마디</label>
+          <input type="text" id="coach-summary" class="field" value="${v(latestRpt,'coach_summary')}" placeholder="기초가 단단해졌습니다. 이제 중량을 올릴 시점입니다.">
+        </div>
+        <div class="form-group" style="margin-bottom:20px;">
+          <label>상세 코멘트</label>
+          <textarea id="coach-detail" class="field" rows="4" placeholder="이번 주 총평을 자유롭게 작성해 주세요.">${v(latestRpt,'coach_detail')}</textarea>
+        </div>
+
+        <div class="section-title">🎯 다음 단계</div>
+        <div style="display:flex;flex-direction:column;gap:12px;">
+          ${[1,2,3].map(i=>`
+            <div>
+              <div class="form-group" style="margin-bottom:6px;"><label>단계 ${i} 제목</label><input type="text" id="ns${i}-title" class="field" value="${v(latestRpt,'next_step'+i+'_title')}"></div>
+              <div class="form-group"><label>단계 ${i} 설명</label><textarea id="ns${i}-body" class="field">${v(latestRpt,'next_step'+i+'_body')}</textarea></div>
+            </div>`).join('')}
+        </div>
+      </div>
+    </div>
+    <div style="height:70px;"></div>`;
+}
+
+function numOrNull(id) {
+  const v = document.getElementById(id)?.value;
+  return v && v !== '' ? +v : null;
+}
+function str(id) { return document.getElementById(id)?.value?.trim() || null; }
+
+async function saveAll() {
+  const status = document.getElementById('save-status');
+  status.textContent = '저장 중...';
+
+  const ormDate  = str('orm-date')  || today();
+  const bodyDate = str('body-date') || today();
+  const rptDate  = str('rpt-date')  || today();
+
+  const ormPayload = {
+    member_id: member.id, date: ormDate,
+    squat: numOrNull('squat'), deadlift: numOrNull('deadlift'), bench: numOrNull('bench'),
+    squat_goal: numOrNull('squat-goal'), deadlift_goal: numOrNull('deadlift-goal'), bench_goal: numOrNull('bench-goal'),
+  };
+  const bodyPayload = {
+    member_id: member.id, date: bodyDate,
+    weight: numOrNull('weight'), fat_pct: numOrNull('fat-pct'), muscle_kg: numOrNull('muscle-kg'),
+    weight_goal: numOrNull('weight-goal'), fat_goal: numOrNull('fat-goal'), muscle_goal: numOrNull('muscle-goal'),
+  };
+  const last_session = {
+    date: str('ls-date'), title: str('ls-title'),
+    pt1: str('ls-pt1'), pt2: str('ls-pt2'), pt3: str('ls-pt3'),
+    type: str('ls-type'), good: str('ls-good'), check: str('ls-check'), next: str('ls-next'),
+  };
+  const changes_3session = [0,1,2].map(i => str('ch'+i));
+  const recurring_issues = [0,1].map(i => ({ title: str('ri'+i+'-title'), body: str('ri'+i+'-body') }));
+  const rptPayload = {
+    member_id: member.id, date: rptDate,
+    summary: str('summary'), last_session, changes_3session, recurring_issues,
+    coach_summary: str('coach-summary'), coach_detail: str('coach-detail'),
+    next_step1_title: str('ns1-title'), next_step1_body: str('ns1-body'),
+    next_step2_title: str('ns2-title'), next_step2_body: str('ns2-body'),
+    next_step3_title: str('ns3-title'), next_step3_body: str('ns3-body'),
+  };
+
+  const hasOrm  = ormPayload.squat || ormPayload.deadlift || ormPayload.bench;
+  const hasBody = bodyPayload.weight || bodyPayload.fat_pct || bodyPayload.muscle_kg;
+
+  const ops = [];
+  if (hasOrm)  ops.push(db.from('one_rm_records').insert(ormPayload));
+  if (hasBody) ops.push(db.from('body_records').insert(bodyPayload));
+  ops.push(db.from('weekly_reports').upsert(rptPayload, { onConflict: 'member_id,date' }));
+
+  const results = await Promise.all(ops);
+  const errs = results.filter(r => r.error);
+  if (errs.length) {
+    status.textContent = '저장 오류: ' + errs[0].error.message;
+    return;
+  }
+  status.textContent = '';
+  const flash = document.getElementById('flash');
+  flash.style.display = 'inline-block';
+  setTimeout(() => flash.style.display = 'none', 3000);
+
+  // 최신 데이터 갱신
+  const [r1,r2,r3] = await Promise.all([
+    db.from('one_rm_records').select('*').eq('member_id',member.id).order('date',{ascending:false}).limit(1).maybeSingle(),
+    db.from('body_records').select('*').eq('member_id',member.id).order('date',{ascending:false}).limit(1).maybeSingle(),
+    db.from('weekly_reports').select('*').eq('member_id',member.id).order('date',{ascending:false}).limit(1).maybeSingle(),
+  ]);
+  latestOrm  = r1.data;
+  latestBody = r2.data;
+  latestRpt  = r3.data;
+}
+
+init();
+</script>
+</body>
+</html>

@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PT Manager — 대시보드</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="config.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --blue:#378ADD; --blue-lt:#EBF5FF;
+      --green:#27AE60; --green-lt:#E8F8F1;
+      --orange:#E8820C; --orange-lt:#FFF3E0;
+      --red:#E74C3C; --red-lt:#FEECEC;
+      --gray:#718096; --border:#E2E8F0;
+      --bg:#F7F9FC; --shadow:0 2px 14px rgba(0,0,0,.07); --r:12px;
+    }
+    body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; background:var(--bg); color:#1A202C; font-size:15px; display:flex; min-height:100vh; }
+
+    /* Sidebar */
+    .sb { width:200px; background:#1A1F36; color:#fff; display:flex; flex-direction:column; padding:24px 0; flex-shrink:0; position:fixed; top:0; left:0; height:100vh; }
+    .sb-logo { font-size:16px; font-weight:800; padding:0 20px 24px; border-bottom:1px solid rgba(255,255,255,.1); }
+    .sb-logo span { color:var(--blue); }
+    .sb-nav { padding:16px 12px; flex:1; }
+    .sb-link { display:flex; align-items:center; gap:8px; padding:10px 12px; border-radius:8px; color:rgba(255,255,255,.65); text-decoration:none; font-size:14px; font-weight:500; margin-bottom:2px; transition:.15s; }
+    .sb-link:hover, .sb-link.active { background:rgba(255,255,255,.1); color:#fff; }
+
+    /* Main */
+    .main { margin-left:200px; flex:1; padding:28px; }
+    .pg-title { font-size:22px; font-weight:800; margin-bottom:20px; }
+
+    /* Stats grid */
+    .stats { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:24px; }
+    .stat { background:#fff; border-radius:var(--r); box-shadow:var(--shadow); padding:18px; }
+    .stat-val  { font-size:30px; font-weight:800; line-height:1; margin-bottom:4px; }
+    .stat-lbl  { font-size:12px; color:var(--gray); }
+
+    /* Card */
+    .card { background:#fff; border-radius:var(--r); box-shadow:var(--shadow); margin-bottom:16px; overflow:hidden; }
+    .card-hd { display:flex; align-items:center; gap:10px; padding:14px 18px; border-bottom:1px solid var(--border); }
+    .card-hd h2 { font-size:14px; font-weight:700; flex:1; }
+    .card-bd { padding:18px; }
+
+    /* Quick checkin form */
+    .form-row { display:grid; grid-template-columns:1fr 140px 160px auto; gap:10px; }
+    .ac-wrap { position:relative; }
+    .field { width:100%; border:1.5px solid var(--border); border-radius:8px; padding:9px 13px; font-size:14px; font-family:inherit; outline:none; background:#fff; transition:border-color .15s; }
+    .field:focus { border-color:var(--blue); }
+    .ac-list { position:absolute; top:calc(100% + 4px); left:0; right:0; background:#fff; border:1px solid var(--border); border-radius:8px; box-shadow:var(--shadow); z-index:100; display:none; }
+    .ac-item { padding:9px 13px; font-size:14px; cursor:pointer; }
+    .ac-item:hover { background:var(--blue-lt); }
+    .btn { background:var(--blue); color:#fff; border:none; border-radius:8px; padding:9px 18px; font-size:14px; font-weight:600; font-family:inherit; cursor:pointer; white-space:nowrap; }
+    .btn:hover { opacity:.88; }
+
+    /* Table */
+    table { width:100%; border-collapse:collapse; font-size:13px; }
+    th { text-align:left; padding:7px 12px; font-size:11px; font-weight:700; color:var(--gray); text-transform:uppercase; letter-spacing:.4px; border-bottom:1px solid var(--border); }
+    td { padding:10px 12px; border-bottom:1px solid var(--border); }
+    tr:last-child td { border-bottom:none; }
+    .badge { display:inline-block; padding:2px 9px; border-radius:20px; font-size:12px; font-weight:600; }
+    .badge-blue { background:var(--blue-lt); color:var(--blue); }
+    .badge-green { background:var(--green-lt); color:var(--green); }
+    .badge-orange { background:var(--orange-lt); color:var(--orange); }
+    a.link { color:var(--blue); text-decoration:none; font-weight:500; }
+    a.link:hover { text-decoration:underline; }
+    .empty { text-align:center; color:var(--gray); padding:32px; font-size:13px; }
+
+    /* Flash */
+    .flash { background:var(--green-lt); border:1px solid #A8E6C5; border-radius:8px; padding:10px 14px; font-size:13px; color:#1a7a4a; margin-bottom:14px; display:none; }
+  </style>
+</head>
+<body>
+
+<aside class="sb">
+  <div class="sb-logo">PT <span>Manager</span></div>
+  <nav class="sb-nav">
+    <a href="index.html" class="sb-link active">📊 대시보드</a>
+    <a href="members.html" class="sb-link">👥 회원 목록</a>
+  </nav>
+</aside>
+
+<div class="main">
+  <div class="pg-title">대시보드</div>
+  <div id="flash" class="flash"></div>
+
+  <!-- Stats -->
+  <div class="stats">
+    <div class="stat"><div class="stat-val" id="s-members">—</div><div class="stat-lbl">전체 회원</div></div>
+    <div class="stat"><div class="stat-val" id="s-today" style="color:var(--blue);">—</div><div class="stat-lbl">오늘 체크인</div></div>
+    <div class="stat"><div class="stat-val" id="s-week" style="color:var(--green);">—</div><div class="stat-lbl">이번 주 체크인</div></div>
+    <div class="stat"><div class="stat-val" id="s-new" style="color:var(--orange);">—</div><div class="stat-lbl">이번 달 신규</div></div>
+  </div>
+
+  <!-- Quick checkin -->
+  <div class="card">
+    <div class="card-hd"><h2>⚡ 빠른 체크인</h2></div>
+    <div class="card-bd">
+      <form id="ci-form">
+        <div class="form-row">
+          <div class="ac-wrap">
+            <input id="ac-input" class="field" placeholder="회원 이름 검색..." autocomplete="off">
+            <input type="hidden" id="ac-id">
+            <div class="ac-list" id="ac-list"></div>
+          </div>
+          <input type="date" id="ci-date" class="field" value="">
+          <select id="ci-type" class="field">
+            <option value="">운동 유형 선택</option>
+            <option>루틴 수행</option>
+            <option>유산소</option>
+            <option>자유 운동</option>
+            <option>수업</option>
+          </select>
+          <button type="submit" class="btn">체크인</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Today checkins -->
+  <div class="card">
+    <div class="card-hd"><h2>📋 오늘의 체크인</h2><span id="today-lbl" style="font-size:12px;color:var(--gray);"></span></div>
+    <div class="card-bd" style="padding:0;overflow-x:auto;">
+      <table>
+        <thead><tr><th>회원</th><th>운동</th><th>수면</th><th>불편한 곳</th><th>식단</th><th>전달사항</th><th>리포트</th></tr></thead>
+        <tbody id="ci-table"><tr><td colspan="7" class="empty">불러오는 중...</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+let allMembers = [];
+
+// ── 날짜 기본값 ────────────────────────────────────────────────────
+document.getElementById('ci-date').value = today();
+document.getElementById('today-lbl').textContent = ko_date(today());
+
+// ── 초기 데이터 로드 ──────────────────────────────────────────────
+async function loadStats() {
+  const t = today();
+  const [mon, sun] = weekRange();
+  const firstOfMonth = t.slice(0, 7) + '-01';
+
+  const [r1, r2, r3, r4] = await Promise.all([
+    db.from('members').select('*', { count: 'exact', head: true }),
+    db.from('checkins').select('*', { count: 'exact', head: true }).eq('date', t),
+    db.from('checkins').select('*', { count: 'exact', head: true }).gte('date', mon).lte('date', sun),
+    db.from('members').select('*', { count: 'exact', head: true }).gte('created_at', firstOfMonth),
+  ]);
+  document.getElementById('s-members').textContent = r1.count ?? 0;
+  document.getElementById('s-today').textContent   = r2.count ?? 0;
+  document.getElementById('s-week').textContent    = r3.count ?? 0;
+  document.getElementById('s-new').textContent     = r4.count ?? 0;
+}
+
+async function loadMembers() {
+  const { data } = await db.from('members').select('id, name').order('name');
+  allMembers = data || [];
+}
+
+async function loadTodayCI() {
+  const t = today();
+  const { data } = await db.from('checkins')
+    .select('*, members(name)')
+    .eq('date', t)
+    .order('created_at', { ascending: false });
+
+  const tbody = document.getElementById('ci-table');
+  if (!data || !data.length) {
+    tbody.innerHTML = '<tr><td colspan="7" class="empty">오늘 체크인 없음</td></tr>';
+    return;
+  }
+  tbody.innerHTML = data.map(r => `
+    <tr>
+      <td><strong>${r.members?.name || '—'}</strong></td>
+      <td>${r.exercise_type ? `<span class="badge badge-blue">${r.exercise_type}</span>` : '—'}</td>
+      <td>${r.sleep_score ? r.sleep_score + '/5' : '—'}</td>
+      <td>${r.pain === '있음' ? `<span class="badge badge-orange">있음</span>` : '<span class="badge badge-green">없음</span>'}</td>
+      <td>${r.diet_score ? r.diet_score + '/5' : '—'}</td>
+      <td style="max-width:160px;color:var(--gray);font-size:12px;">${r.message_to_trainer || ''}</td>
+      <td><a class="link" href="report.html?m=${encodeURIComponent(r.members?.name || '')}">리포트</a></td>
+    </tr>`).join('');
+}
+
+// ── Autocomplete ───────────────────────────────────────────────────
+const acInput = document.getElementById('ac-input');
+const acId    = document.getElementById('ac-id');
+const acList  = document.getElementById('ac-list');
+
+acInput.addEventListener('input', () => {
+  const q = acInput.value.trim();
+  acId.value = '';
+  if (!q) { acList.style.display = 'none'; return; }
+  const matches = allMembers.filter(m => m.name.includes(q));
+  if (!matches.length) { acList.style.display = 'none'; return; }
+  acList.innerHTML = matches.map(m =>
+    `<div class="ac-item" data-id="${m.id}" data-name="${m.name}">${m.name}</div>`
+  ).join('');
+  acList.style.display = 'block';
+});
+
+acList.addEventListener('click', e => {
+  const item = e.target.closest('.ac-item');
+  if (!item) return;
+  acInput.value = item.dataset.name;
+  acId.value    = item.dataset.id;
+  acList.style.display = 'none';
+});
+
+document.addEventListener('click', e => {
+  if (!e.target.closest('.ac-wrap')) acList.style.display = 'none';
+});
+
+// ── 빠른 체크인 저장 ──────────────────────────────────────────────
+document.getElementById('ci-form').addEventListener('submit', async e => {
+  e.preventDefault();
+  const mid = acId.value;
+  if (!mid) { alert('회원을 선택해 주세요.'); return; }
+  const date = document.getElementById('ci-date').value || today();
+  const exercise_type = document.getElementById('ci-type').value;
+
+  const { error } = await db.from('checkins').upsert({
+    member_id: +mid, date, exercise_type
+  }, { onConflict: 'member_id,date', ignoreDuplicates: true });
+
+  if (error) { alert('오류: ' + error.message); return; }
+
+  const name = acInput.value;
+  showFlash(`${name} 님 체크인 완료!`);
+  acInput.value = ''; acId.value = '';
+  document.getElementById('ci-type').value = '';
+  loadTodayCI();
+  loadStats();
+});
+
+function showFlash(msg) {
+  const el = document.getElementById('flash');
+  el.textContent = msg; el.style.display = 'block';
+  setTimeout(() => el.style.display = 'none', 3500);
+}
+
+// ── 초기화 ────────────────────────────────────────────────────────
+loadStats();
+loadMembers();
+loadTodayCI();
+</script>
+</body>
+</html>

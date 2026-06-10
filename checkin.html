@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>체크인</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="config.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --blue:#378ADD; --blue-lt:#EBF5FF;
+      --green:#27AE60; --green-lt:#E8F8F1;
+      --orange:#E8820C; --orange-lt:#FFF3E0;
+      --red:#E74C3C; --red-lt:#FEECEC;
+      --gray:#718096; --border:#E2E8F0;
+      --shadow:0 2px 14px rgba(0,0,0,.07); --r:14px;
+    }
+    body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; background:#F7F9FC; color:#1A202C; font-size:15px; }
+    .page-top { background:#fff; border-bottom:1px solid var(--border); padding:28px 20px 22px; text-align:center; }
+    .pt-label { font-size:12px; color:var(--gray); letter-spacing:.5px; text-transform:uppercase; margin-bottom:6px; }
+    .pt-name  { font-size:22px; font-weight:800; margin-bottom:4px; }
+    .pt-date  { font-size:13px; color:var(--gray); }
+    .wrap { max-width:540px; margin:0 auto; padding:20px 16px 60px; }
+    .card { background:#fff; border-radius:var(--r); box-shadow:var(--shadow); margin-bottom:12px; overflow:hidden; }
+    .card-hd { display:flex; align-items:center; gap:10px; padding:14px 18px; border-bottom:1px solid var(--border); }
+    .card-hd .ico { width:28px; height:28px; border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:15px; }
+    .ic-b{background:var(--blue-lt);} .ic-p{background:#F3EEFF;} .ic-g{background:var(--green-lt);} .ic-r{background:var(--red-lt);} .ic-o{background:var(--orange-lt);}
+    .card-hd h2 { font-size:14px; font-weight:700; }
+    .card-bd { padding:16px 18px; }
+    .chips { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+    .chip-inp { display:none; }
+    .chip-lbl { display:flex; align-items:center; justify-content:center; gap:7px; padding:11px 10px; border:2px solid var(--border); border-radius:999px; cursor:pointer; font-size:13px; font-weight:600; color:#4A5568; transition:.15s; }
+    .chip-lbl .em { font-size:17px; }
+    .chip-inp:checked + .chip-lbl { border-color:var(--blue); background:var(--blue-lt); color:var(--blue); }
+    .num-row { display:flex; gap:8px; margin:4px 0 2px; }
+    .num-inp { display:none; }
+    .num-lbl { flex:1; height:50px; border:2px solid var(--border); border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:17px; font-weight:700; cursor:pointer; color:var(--gray); transition:.15s; }
+    .num-lbl:hover { border-color:var(--blue); color:var(--blue); }
+    .num-inp:checked + .num-lbl { border-color:var(--blue); background:var(--blue-lt); color:var(--blue); }
+    .num-hint { display:flex; justify-content:space-between; font-size:11px; color:var(--gray); margin-top:5px; }
+    .pain-toggle { display:flex; gap:8px; margin-bottom:14px; }
+    .pain-opt { display:none; }
+    .pain-lbl { flex:1; text-align:center; padding:11px; border:2px solid var(--border); border-radius:999px; cursor:pointer; font-size:14px; font-weight:600; color:#4A5568; transition:.15s; }
+    #pain-no:checked  ~ .pain-toggle .lbl-no  { border-color:var(--green); background:var(--green-lt); color:var(--green); }
+    #pain-yes:checked ~ .pain-toggle .lbl-yes { border-color:var(--red); background:var(--red-lt); color:var(--red); }
+    .pain-detail { display:none; }
+    #pain-yes:checked ~ .pain-detail { display:block; }
+    .scale { display:flex; gap:5px; margin:10px 0 4px; flex-wrap:wrap; }
+    .sc-inp { display:none; }
+    .sc-lbl { width:36px; height:36px; border-radius:8px; border:2px solid var(--border); display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:700; cursor:pointer; color:var(--gray); transition:.12s; }
+    .sc-inp:checked + .sc-lbl { border-color:var(--red); background:var(--red-lt); color:var(--red); }
+    .scale-hint { display:flex; justify-content:space-between; font-size:11px; color:var(--gray); }
+    .memo-label { font-size:12px; color:var(--gray); margin:12px 0 5px; display:block; }
+    .field { width:100%; border:1.5px solid var(--border); border-radius:8px; padding:10px 13px; font-size:14px; font-family:inherit; outline:none; resize:vertical; transition:border-color .15s; background:#fff; }
+    .field:focus { border-color:var(--blue); }
+    .submit { width:100%; background:var(--blue); color:#fff; border:none; border-radius:12px; padding:16px; font-size:16px; font-weight:700; font-family:inherit; cursor:pointer; margin-top:6px; transition:opacity .15s; }
+    .submit:hover { opacity:.88; }
+    .already { background:var(--green-lt); border:1px solid #A8E6C5; border-radius:10px; padding:11px 14px; font-size:13px; color:#1a7a4a; display:flex; align-items:center; gap:8px; margin-bottom:12px; }
+    .success-card { background:#fff; border-radius:var(--r); box-shadow:var(--shadow); padding:36px 24px; text-align:center; }
+    .success-icon  { font-size:52px; margin-bottom:14px; }
+    .success-title { font-size:20px; font-weight:800; color:var(--green); margin-bottom:4px; }
+    .success-sub   { font-size:13px; color:var(--gray); margin-bottom:22px; }
+    .summary-box   { background:var(--blue-lt); border-radius:10px; padding:16px; text-align:left; }
+    .sum-row { display:flex; gap:10px; padding:7px 0; font-size:13px; border-bottom:1px solid #D0E6FF; }
+    .sum-row:last-child { border-bottom:none; }
+    .sum-lbl { color:var(--gray); width:70px; flex-shrink:0; }
+    .sum-val { font-weight:500; }
+    .err-box { max-width:400px; margin:60px auto; background:#fff; border-radius:var(--r); box-shadow:var(--shadow); padding:40px; text-align:center; }
+  </style>
+</head>
+<body>
+<div id="app"></div>
+
+<script>
+const params = new URLSearchParams(location.search);
+const memberName = (params.get('m') || '').trim();
+let member = null, existing = null;
+
+async function init() {
+  if (!memberName) { renderError('URL에 ?m=이름 을 붙여주세요.'); return; }
+
+  const { data: mData } = await db.from('members').select('*').eq('name', memberName).maybeSingle();
+  if (!mData) { renderError(`'${memberName}' 회원을 찾을 수 없습니다.`); return; }
+  member = mData;
+
+  const t = today();
+  const { data: ci } = await db.from('checkins').select('*').eq('member_id', member.id).eq('date', t).maybeSingle();
+  existing = ci;
+
+  renderForm();
+}
+
+function renderError(msg) {
+  document.getElementById('app').innerHTML = `
+    <div class="err-box"><div style="font-size:48px;">❌</div><h1 style="margin:12px 0 6px;font-size:18px;">오류</h1><p style="color:var(--red);font-size:13px;">${msg}</p></div>`;
+}
+
+function renderForm() {
+  const t = today();
+  const d = new Date();
+  const days = ['일','월','화','수','목','금','토'];
+  const dateStr = `${d.getFullYear()}년 ${d.getMonth()+1}월 ${d.getDate()}일 (${days[d.getDay()]})`;
+
+  document.getElementById('app').innerHTML = `
+    <div class="page-top">
+      <div class="pt-label">수업 전 체크인</div>
+      <div class="pt-name">${member.name} 님</div>
+      <div class="pt-date">${dateStr}</div>
+    </div>
+    <div class="wrap">
+      ${existing ? '<div class="already">✅ 오늘 이미 제출했어요. 수정 후 다시 저장할 수 있습니다.</div>' : ''}
+      <form id="ci-form">
+
+        <div class="card">
+          <div class="card-hd"><div class="ico ic-b">🏋️</div><h2>오늘의 운동</h2></div>
+          <div class="card-bd">
+            <div class="chips">
+              ${[['루틴 수행','📋'],['유산소','🏃'],['자유 운동','🎯'],['수업','👨‍🏫']].map(([v,em],i) => `
+                <input type="radio" name="exercise_type" id="et${i}" value="${v}" class="chip-inp" ${existing?.exercise_type===v?'checked':''}>
+                <label for="et${i}" class="chip-lbl"><span class="em">${em}</span>${v}</label>
+              `).join('')}
+            </div>
+            <label class="memo-label">메모 (선택)</label>
+            <input type="text" name="exercise_memo" class="field" value="${existing?.exercise_memo||''}" placeholder="예: 스쿼트 위주">
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-hd"><div class="ico ic-p">😴</div><h2>수면의 질</h2></div>
+          <div class="card-bd">
+            <div class="num-row">
+              ${[1,2,3,4,5].map(i=>`
+                <input type="radio" name="sleep_score" id="sl${i}" value="${i}" class="num-inp" ${existing?.sleep_score===i?'checked':''}>
+                <label for="sl${i}" class="num-lbl">${i}</label>
+              `).join('')}
+            </div>
+            <div class="num-hint"><span>😴 매우 나쁨</span><span>😊 매우 좋음</span></div>
+            <label class="memo-label">메모 (선택)</label>
+            <input type="text" name="sleep_memo" class="field" value="${existing?.sleep_memo||''}" placeholder="예: 6시간, 야근 후 늦게 잠">
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-hd"><div class="ico ic-r">🩹</div><h2>불편한 곳</h2></div>
+          <div class="card-bd">
+            <input type="radio" name="pain" id="pain-no"  value="없음" class="pain-opt" ${existing?.pain==='있음'?'':'checked'}>
+            <input type="radio" name="pain" id="pain-yes" value="있음" class="pain-opt" ${existing?.pain==='있음'?'checked':''}>
+            <div class="pain-toggle">
+              <label for="pain-no"  class="pain-lbl lbl-no">✅ 없음</label>
+              <label for="pain-yes" class="pain-lbl lbl-yes">⚠️ 있음</label>
+            </div>
+            <div class="pain-detail">
+              <input type="text" name="pain_memo" class="field" value="${existing?.pain_memo||''}" placeholder="어디가 불편한지 적어주세요">
+              <div class="scale" style="margin-top:12px;">
+                ${[...Array(10)].map((_,i)=>`
+                  <input type="radio" name="pain_scale" id="ps${i+1}" value="${i+1}" class="sc-inp">
+                  <label for="ps${i+1}" class="sc-lbl">${i+1}</label>
+                `).join('')}
+              </div>
+              <div class="scale-hint"><span>1 — 미세한 불편</span><span>10 — 극심한 통증</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-hd"><div class="ico ic-g">🥗</div><h2>오늘 식단</h2></div>
+          <div class="card-bd">
+            <div class="num-row">
+              ${[1,2,3,4,5].map(i=>`
+                <input type="radio" name="diet_score" id="dt${i}" value="${i}" class="num-inp" ${existing?.diet_score===i?'checked':''}>
+                <label for="dt${i}" class="num-lbl">${i}</label>
+              `).join('')}
+            </div>
+            <div class="num-hint"><span>🍔 매우 나쁨</span><span>🥗 완벽한 식단</span></div>
+            <label class="memo-label">메모 (선택)</label>
+            <input type="text" name="diet_memo" class="field" value="${existing?.diet_memo||''}" placeholder="예: 단백질 부족, 야식 있음">
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-hd"><div class="ico ic-o">💬</div><h2>트레이너에게 전달</h2></div>
+          <div class="card-bd">
+            <textarea name="message_to_trainer" class="field" rows="3" placeholder="일정 변경, 질문, 요청 등 자유롭게">${existing?.message_to_trainer||''}</textarea>
+          </div>
+        </div>
+
+        <button type="submit" class="submit">오늘 체크인 저장하기</button>
+      </form>
+    </div>`;
+
+  document.getElementById('ci-form').addEventListener('submit', handleSubmit);
+}
+
+async function handleSubmit(e) {
+  e.preventDefault();
+  const fd = new FormData(e.target);
+  const get = k => fd.get(k) || null;
+
+  const pain = get('pain') || '없음';
+  const payload = {
+    member_id: member.id,
+    date: today(),
+    exercise_type: get('exercise_type'),
+    exercise_memo: get('exercise_memo'),
+    sleep_score: get('sleep_score') ? +get('sleep_score') : null,
+    sleep_memo: get('sleep_memo'),
+    pain,
+    pain_memo: pain === '있음' ? get('pain_memo') : null,
+    diet_score: get('diet_score') ? +get('diet_score') : null,
+    diet_memo: get('diet_memo'),
+    message_to_trainer: get('message_to_trainer'),
+  };
+
+  const { data, error } = await db.from('checkins')
+    .upsert(payload, { onConflict: 'member_id,date' })
+    .select().single();
+
+  if (error) { alert('오류: ' + error.message); return; }
+
+  renderSuccess(data);
+}
+
+function renderSuccess(ci) {
+  document.getElementById('app').innerHTML = `
+    <div class="page-top">
+      <div class="pt-label">체크인 완료</div>
+      <div class="pt-name">${member.name} 님</div>
+      <div class="pt-date">오늘도 화이팅! 💪</div>
+    </div>
+    <div class="wrap">
+      <div class="success-card">
+        <div class="success-icon">✅</div>
+        <div class="success-title">체크인 완료!</div>
+        <div class="success-sub">트레이너에게 전달되었습니다.</div>
+        <div class="summary-box">
+          <div class="sum-row"><span class="sum-lbl">운동수행</span><span class="sum-val">${ci.exercise_type||'—'}</span></div>
+          <div class="sum-row"><span class="sum-lbl">수면의 질</span><span class="sum-val">${ci.sleep_score?ci.sleep_score+'/5':'—'}</span></div>
+          <div class="sum-row"><span class="sum-lbl">불편한 곳</span><span class="sum-val">${ci.pain==='있음'?(ci.pain_memo||'있음'):'없음'}</span></div>
+          <div class="sum-row"><span class="sum-lbl">식단</span><span class="sum-val">${ci.diet_score?ci.diet_score+'/5':'—'}</span></div>
+          ${ci.message_to_trainer?`<div class="sum-row"><span class="sum-lbl">전달사항</span><span class="sum-val">${ci.message_to_trainer}</span></div>`:''}
+        </div>
+      </div>
+    </div>`;
+}
+
+init();
+</script>
+</body>
+</html>
