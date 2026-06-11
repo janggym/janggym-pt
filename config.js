@@ -1,3 +1,7 @@
+// ── Gemini 설정 ───────────────────────────────────────────────────
+const GEMINI_API_KEY = 'AQ.Ab8RN6JtP61xYH4AyimJ5S3RzvivLSTDtVqAMZdIiXZT4Z2U_Q';
+const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`;
+
 // ── Supabase 설정 ──────────────────────────────────────────────────
 // Supabase 대시보드 → Settings → API 에서 복사
 const SUPABASE_URL  = 'https://blyehdfgrbfzjpsitgzh.supabase.co';
