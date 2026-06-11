@@ -25,7 +25,6 @@ exports.handler = async (event) => {
           { text: '이 인바디 결과지 이미지에서 다음 수치를 읽어서 JSON으로만 응답해줘. 다른 설명 없이 JSON만:\n{"weight":숫자,"fat_pct":숫자,"muscle_kg":숫자}\n체중(kg), 체지방률(%), 골격근량(kg). 값을 찾을 수 없으면 null로 해줘.' },
           { inline_data: { mime_type: mediaType, data: image } },
         ]}],
-        generationConfig: { responseMimeType: 'application/json' },
       }),
     });
   } catch (err) {
@@ -38,7 +37,8 @@ exports.handler = async (event) => {
 
   let result;
   try {
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
+    const parts = data.candidates?.[0]?.content?.parts || [];
+    const text = parts.filter(p => !p.thought).map(p => p.text || '').join('').trim();
     const match = text.match(/\{[\s\S]*\}/);
     result = JSON.parse(match ? match[0] : text);
   } catch {
