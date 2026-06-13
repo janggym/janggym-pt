@@ -257,7 +257,6 @@ function renderPage() {
     ${renderHeader(latestOrm, prevOrm, ls, rpt)}
     <div class="wrap">
       ${renderCheckin()}
-      ${renderLearnedExercises()}
       ${renderWorkoutProgram()}
       ${rpt ? renderSummary(ls, ch, ri) : ''}
       ${latestBody ? renderBody(latestBody, prevBody) : ''}
@@ -266,6 +265,7 @@ function renderPage() {
       ${renderInbodyAI()}
       ${latestOrm ? renderOrmTable(latestOrm, prevOrm) : ''}
       ${renderCoach(rpt)}
+      ${renderLearnedExercises()}
       ${renderNext()}
     </div>`;
 
