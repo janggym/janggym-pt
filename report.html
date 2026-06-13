@@ -23,10 +23,10 @@
     .pt-meta  { display:flex; align-items:center; gap:10px; margin-bottom:14px; flex-wrap:wrap; }
     .pt-tag   { background:var(--blue); color:#fff; font-size:11px; font-weight:700; padding:3px 10px; border-radius:20px; letter-spacing:.5px; }
     .pt-date  { font-size:13px; color:var(--gray); }
-    .rpt-nav  { display:flex; align-items:center; gap:10px; margin-bottom:12px; }
-    .rpt-nav-btn { background:rgba(255,255,255,.15); border:1px solid rgba(255,255,255,.3); color:#fff; padding:5px 14px; border-radius:20px; font-size:13px; cursor:pointer; }
+    .rpt-nav  { display:flex; align-items:center; gap:10px; background:#fff; border-radius:var(--r); box-shadow:var(--shadow); padding:12px 16px; margin-bottom:12px; }
+    .rpt-nav-btn { background:var(--blue-lt); border:none; color:var(--blue); padding:7px 16px; border-radius:20px; font-size:13px; font-weight:700; cursor:pointer; }
     .rpt-nav-btn:disabled { opacity:.35; cursor:default; }
-    .rpt-nav-date { font-size:14px; font-weight:600; color:#fff; flex:1; text-align:center; }
+    .rpt-nav-date { font-size:14px; font-weight:700; color:#1A202C; flex:1; text-align:center; }
     .pt-title { font-size:26px; font-weight:800; line-height:1.25; margin-bottom:8px; }
     .pt-summary { font-size:14px; color:#4A5568; margin-bottom:20px; line-height:1.6; }
     .bubbles { display:flex; flex-direction:column; gap:8px; margin-bottom:18px; }
@@ -279,6 +279,7 @@ function renderPage() {
       ${renderFoodAI()}
       ${renderInbodyAI()}
       ${latestOrm ? renderOrmTable(latestOrm, prevOrm) : ''}
+      ${renderWeeklyNav()}
       ${renderCoach(rpt)}
       ${renderLearnedExercises()}
       ${renderNext()}
@@ -306,14 +307,6 @@ function renderPage() {
 function renderHeader(orm, prev, ls, rpt) {
   const bubbles = [ls.pt1, ls.pt2, ls.pt3].filter(Boolean);
   const hasPrev = weeklyIdx < allWeeklyDates.length - 1;
-  const hasNext = weeklyIdx > 0;
-  const rptDateLabel = allWeeklyDates[weeklyIdx] || '';
-  const navHtml = allWeeklyDates.length > 0 ? `
-    <div class="rpt-nav">
-      <button class="rpt-nav-btn" onclick="goRpt(1)" ${hasPrev?'':'disabled'}>← 이전 주</button>
-      <span class="rpt-nav-date">${ko_date(rptDateLabel)}</span>
-      <button class="rpt-nav-btn" onclick="goRpt(-1)" ${hasNext?'':'disabled'}>다음 주 →</button>
-    </div>` : '';
   return `
   <div class="page-top">
     <div class="pt-inner">
@@ -321,7 +314,6 @@ function renderHeader(orm, prev, ls, rpt) {
         <span class="pt-tag">주간 리포트</span>
         <span class="pt-date">${today()}</span>
       </div>
-      ${navHtml}
       <div class="pt-title">${member.name} 님 리포트</div>
       ${rpt?.summary ? `<div class="pt-summary">${rpt.summary}</div>` : ''}
       ${bubbles.length ? `<div class="bubbles">${bubbles.map(b=>`<div class="bubble">${b}</div>`).join('')}</div>` : ''}
@@ -1116,6 +1108,18 @@ function renderNext() {
         ${nextSteps.length > 0 ? `<button class="btn-save" onclick="saveNextSteps()">💾 저장</button>` : ''}
       </div>
     </div>
+  </div>`;
+}
+
+function renderWeeklyNav() {
+  if (!allWeeklyDates.length) return '';
+  const hasPrev = weeklyIdx < allWeeklyDates.length - 1;
+  const hasNext = weeklyIdx > 0;
+  const label = allWeeklyDates[weeklyIdx] ? ko_date(allWeeklyDates[weeklyIdx]) : '리포트 없음';
+  return `<div class="rpt-nav">
+    <button class="rpt-nav-btn" onclick="goRpt(1)" ${hasPrev?'':'disabled'}>← 이전 주</button>
+    <span class="rpt-nav-date">📋 ${label}</span>
+    <button class="rpt-nav-btn" onclick="goRpt(-1)" ${hasNext?'':'disabled'}>다음 주 →</button>
   </div>`;
 }
 
