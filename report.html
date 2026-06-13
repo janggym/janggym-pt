@@ -233,10 +233,11 @@ async function init() {
     db.from('checkins').select('date').eq('member_id',member.id).order('date',{ascending:false}),
     db.from('weekly_reports').select('date').eq('member_id',member.id).order('date',{ascending:false}),
   ]);
-  const merged = [...new Set([...(ciDates||[]).map(r=>r.date), ...(rptDatesData||[]).map(r=>r.date)])];
+  const t = today();
+  const merged = [...new Set([t, ...(ciDates||[]).map(r=>r.date), ...(rptDatesData||[]).map(r=>r.date)])];
   allRptDates = merged.sort((a,b) => b.localeCompare(a));
   rptDateIdx = 0;
-  rptDate = allRptDates[0] || today();
+  rptDate = t;
 
   const [r1,r2,r3,r4,r5,r6,r7] = await Promise.all([
     db.from('checkins').select('*').eq('member_id',member.id).eq('date',rptDate).maybeSingle(),
