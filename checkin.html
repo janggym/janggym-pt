@@ -67,6 +67,18 @@
     .sum-lbl { color:var(--gray); width:70px; flex-shrink:0; }
     .sum-val { font-weight:500; }
     .err-box { max-width:400px; margin:60px auto; background:#fff; border-radius:var(--r); box-shadow:var(--shadow); padding:40px; text-align:center; }
+    .hist-toggle { width:100%; background:#fff; border:1.5px solid var(--border); border-radius:12px; padding:14px; font-size:14px; font-weight:600; color:#4A5568; cursor:pointer; margin-top:4px; }
+    .hist-item { background:#fff; border-radius:var(--r); box-shadow:var(--shadow); margin-bottom:8px; overflow:hidden; }
+    .hist-hd { display:flex; align-items:center; justify-content:space-between; padding:13px 16px; cursor:pointer; }
+    .hist-date { font-size:13px; font-weight:700; }
+    .hist-badges { display:flex; gap:6px; }
+    .hist-badge { font-size:11px; padding:2px 8px; border-radius:20px; font-weight:600; background:var(--blue-lt); color:var(--blue); }
+    .hist-badge.pain { background:var(--red-lt); color:var(--red); }
+    .hist-bd { display:none; padding:0 16px 14px; border-top:1px solid var(--border); }
+    .hist-bd.open { display:block; }
+    .hist-row { display:flex; gap:10px; padding:6px 0; font-size:13px; border-bottom:1px solid var(--border); }
+    .hist-row:last-child { border-bottom:none; }
+    .hist-lbl { color:var(--gray); width:72px; flex-shrink:0; }
   </style>
 </head>
 <body>
@@ -75,7 +87,7 @@
 <script>
 const params = new URLSearchParams(location.search);
 const memberName = (params.get('m') || '').trim();
-let member = null, existing = null;
+let member = null, existing = null, pastCheckins = [];
 
 async function init() {
   if (!memberName) { renderError('URL에 ?m=이름 을 붙여주세요.'); return; }
@@ -85,8 +97,12 @@ async function init() {
   member = mData;
 
   const t = today();
-  const { data: ci } = await db.from('checkins').select('*').eq('member_id', member.id).eq('date', t).maybeSingle();
+  const [{ data: ci }, { data: past }] = await Promise.all([
+    db.from('checkins').select('*').eq('member_id', member.id).eq('date', t).maybeSingle(),
+    db.from('checkins').select('*').eq('member_id', member.id).neq('date', t).order('date', { ascending: false }).limit(20),
+  ]);
   existing = ci;
+  pastCheckins = past || [];
 
   renderForm();
 }
@@ -187,9 +203,43 @@ function renderForm() {
 
         <button type="submit" class="submit">오늘 체크인 저장하기</button>
       </form>
+      ${renderPastCheckins()}
     </div>`;
 
   document.getElementById('ci-form').addEventListener('submit', handleSubmit);
+}
+
+function renderPastCheckins() {
+  if (!pastCheckins.length) return '';
+  const items = pastCheckins.map((ci, i) => {
+    const [y, m, d] = ci.date.split('-');
+    const dateLabel = `${+m}월 ${+d}일`;
+    const badges = [
+      ci.exercise_type ? `<span class="hist-badge">${ci.exercise_type}</span>` : '',
+      ci.sleep_score   ? `<span class="hist-badge">수면 ${ci.sleep_score}/5</span>` : '',
+      ci.pain === '있음' ? `<span class="hist-badge pain">통증 있음</span>` : '',
+    ].join('');
+    return `
+    <div class="hist-item">
+      <div class="hist-hd" onclick="this.nextElementSibling.classList.toggle('open')">
+        <span class="hist-date">${dateLabel}</span>
+        <div class="hist-badges">${badges}</div>
+      </div>
+      <div class="hist-bd">
+        ${ci.exercise_type ? `<div class="hist-row"><span class="hist-lbl">운동수행</span><span>${ci.exercise_type}${ci.exercise_memo?' · '+ci.exercise_memo:''}</span></div>` : ''}
+        ${ci.sleep_score  ? `<div class="hist-row"><span class="hist-lbl">수면의 질</span><span>${ci.sleep_score}/5${ci.sleep_memo?' · '+ci.sleep_memo:''}</span></div>` : ''}
+        <div class="hist-row"><span class="hist-lbl">불편한 곳</span><span>${ci.pain==='있음'?(ci.pain_memo||'있음'):'없음'}</span></div>
+        ${ci.diet_score   ? `<div class="hist-row"><span class="hist-lbl">식단</span><span>${ci.diet_score}/5${ci.diet_memo?' · '+ci.diet_memo:''}</span></div>` : ''}
+        ${ci.message_to_trainer ? `<div class="hist-row"><span class="hist-lbl">전달사항</span><span>${ci.message_to_trainer}</span></div>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+
+  return `
+    <div style="margin-top:20px;">
+      <div style="font-size:13px;font-weight:700;color:var(--gray);margin-bottom:10px;">📋 지난 체크인 기록</div>
+      ${items}
+    </div>`;
 }
 
 async function handleSubmit(e) {
