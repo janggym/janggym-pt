@@ -106,6 +106,10 @@
         <input id="f-sheets-id" class="field" placeholder="스프레드시트 ID 붙여넣기">
         <div style="font-size:11px;color:var(--gray);margin-top:4px;">URL에서 /d/ 뒤 ~ /edit 앞 부분</div>
       </div>
+      <div class="form-group">
+        <label>시트 탭 이름 <span style="font-weight:400;color:var(--gray);">(하단 탭)</span></label>
+        <input id="f-sheets-tab" class="field" placeholder="예: w1, 박소영, Sheet1">
+      </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-outline" onclick="closeModal()">취소</button>
         <button type="submit" class="btn">등록</button>
@@ -136,6 +140,10 @@
         <label>Google Sheets ID <span style="font-weight:400;color:var(--gray);">(운동 프로그램)</span></label>
         <input id="ef-sheets-id" class="field" placeholder="스프레드시트 ID 붙여넣기">
         <div style="font-size:11px;color:var(--gray);margin-top:4px;">URL에서 /d/ 뒤 ~ /edit 앞 부분</div>
+      </div>
+      <div class="form-group">
+        <label>시트 탭 이름 <span style="font-weight:400;color:var(--gray);">(하단 탭)</span></label>
+        <input id="ef-sheets-tab" class="field" placeholder="예: w1, 박소영, Sheet1">
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-outline" style="color:#E53E3E;border-color:#E53E3E;" onclick="deleteMember()">삭제</button>
@@ -212,10 +220,11 @@ document.getElementById('add-form').addEventListener('submit', async e => {
   const name      = document.getElementById('f-name').value.trim();
   const phone     = document.getElementById('f-phone').value.trim();
   const memo      = document.getElementById('f-memo').value.trim();
-  const sheets_id = document.getElementById('f-sheets-id').value.trim() || null;
+  const sheets_id  = document.getElementById('f-sheets-id').value.trim() || null;
+  const sheets_tab = document.getElementById('f-sheets-tab').value.trim() || null;
   if (!name) return;
 
-  const { error } = await db.from('members').insert({ name, phone, memo, sheets_id });
+  const { error } = await db.from('members').insert({ name, phone, memo, sheets_id, sheets_tab });
   if (error) { alert('오류: ' + error.message); return; }
 
   closeModal();
@@ -231,7 +240,8 @@ function openEditModal(id) {
   document.getElementById('ef-name').value     = m.name;
   document.getElementById('ef-phone').value    = m.phone || '';
   document.getElementById('ef-memo').value     = m.memo || '';
-  document.getElementById('ef-sheets-id').value = m.sheets_id || '';
+  document.getElementById('ef-sheets-id').value  = m.sheets_id  || '';
+  document.getElementById('ef-sheets-tab').value = m.sheets_tab || '';
   document.getElementById('edit-modal').classList.add('show');
 }
 
@@ -249,10 +259,11 @@ document.getElementById('edit-form').addEventListener('submit', async e => {
   const name      = document.getElementById('ef-name').value.trim();
   const phone     = document.getElementById('ef-phone').value.trim();
   const memo      = document.getElementById('ef-memo').value.trim();
-  const sheets_id = document.getElementById('ef-sheets-id').value.trim() || null;
+  const sheets_id  = document.getElementById('ef-sheets-id').value.trim() || null;
+  const sheets_tab = document.getElementById('ef-sheets-tab').value.trim() || null;
   if (!name) return;
 
-  const { error } = await db.from('members').update({ name, phone, memo, sheets_id }).eq('id', id);
+  const { error } = await db.from('members').update({ name, phone, memo, sheets_id, sheets_tab }).eq('id', id);
   if (error) { alert('오류: ' + error.message); return; }
 
   closeEditModal();

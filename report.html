@@ -628,8 +628,9 @@ async function saveFoodLog() {
 
 async function fetchWorkoutProgram() {
   if (!member.sheets_id) return null;
+  const tabName = member.sheets_tab || member.name;
   try {
-    const url = `https://docs.google.com/spreadsheets/d/${encodeURIComponent(member.sheets_id)}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(member.name)}`;
+    const url = `https://docs.google.com/spreadsheets/d/${member.sheets_id}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(tabName)}`;
     const res = await fetch(url);
     const text = await res.text();
     const match = text.match(/setResponse\(([\s\S]+)\);?\s*$/);
