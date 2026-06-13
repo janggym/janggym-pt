@@ -228,9 +228,13 @@ async function init() {
 
   workoutDayIdx = 0;
 
-  // 모든 리포트 날짜 로드
-  const { data: datesData } = await db.from('weekly_reports').select('date').eq('member_id',member.id).order('date',{ascending:false});
-  allRptDates = (datesData || []).map(r => r.date);
+  // 체크인 + 리포트 날짜 합쳐서 탐색
+  const [{ data: ciDates }, { data: rptDatesData }] = await Promise.all([
+    db.from('checkins').select('date').eq('member_id',member.id).order('date',{ascending:false}),
+    db.from('weekly_reports').select('date').eq('member_id',member.id).order('date',{ascending:false}),
+  ]);
+  const merged = [...new Set([...(ciDates||[]).map(r=>r.date), ...(rptDatesData||[]).map(r=>r.date)])];
+  allRptDates = merged.sort((a,b) => b.localeCompare(a));
   rptDateIdx = 0;
   rptDate = allRptDates[0] || today();
 
