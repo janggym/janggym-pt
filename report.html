@@ -23,6 +23,10 @@
     .pt-meta  { display:flex; align-items:center; gap:10px; margin-bottom:14px; flex-wrap:wrap; }
     .pt-tag   { background:var(--blue); color:#fff; font-size:11px; font-weight:700; padding:3px 10px; border-radius:20px; letter-spacing:.5px; }
     .pt-date  { font-size:13px; color:var(--gray); }
+    .rpt-nav  { display:flex; align-items:center; gap:10px; margin-bottom:12px; }
+    .rpt-nav-btn { background:rgba(255,255,255,.15); border:1px solid rgba(255,255,255,.3); color:#fff; padding:5px 14px; border-radius:20px; font-size:13px; cursor:pointer; }
+    .rpt-nav-btn:disabled { opacity:.35; cursor:default; }
+    .rpt-nav-date { font-size:14px; font-weight:600; color:#fff; flex:1; text-align:center; }
     .pt-title { font-size:26px; font-weight:800; line-height:1.25; margin-bottom:8px; }
     .pt-summary { font-size:14px; color:#4A5568; margin-bottom:20px; line-height:1.6; }
     .bubbles { display:flex; flex-direction:column; gap:8px; margin-bottom:18px; }
@@ -211,6 +215,9 @@ let goalEditMode = false;
 let workoutData = null;
 let workoutDayIdx = 0;
 let learnedExercises = [];
+let allRptDates = [];
+let rptDateIdx = 0;
+let rptDate = '';
 
 async function init() {
   if (!memberName) { renderError('URL에 ?m=이름 을 붙여주세요.'); return; }
@@ -219,14 +226,20 @@ async function init() {
   if (!mData) { renderError(`'${memberName}' 회원을 찾을 수 없습니다.`); return; }
   member = mData;
 
-  const t = today();
   workoutDayIdx = 0;
+
+  // 모든 리포트 날짜 로드
+  const { data: datesData } = await db.from('weekly_reports').select('date').eq('member_id',member.id).order('date',{ascending:false});
+  allRptDates = (datesData || []).map(r => r.date);
+  rptDateIdx = 0;
+  rptDate = allRptDates[0] || today();
+
   const [r1,r2,r3,r4,r5,r6,r7] = await Promise.all([
-    db.from('checkins').select('*').eq('member_id',member.id).eq('date',t).maybeSingle(),
-    db.from('weekly_reports').select('*').eq('member_id',member.id).order('date',{ascending:false}).limit(1).maybeSingle(),
+    db.from('checkins').select('*').eq('member_id',member.id).eq('date',rptDate).maybeSingle(),
+    db.from('weekly_reports').select('*').eq('member_id',member.id).eq('date',rptDate).maybeSingle(),
     db.from('one_rm_records').select('*').eq('member_id',member.id).order('date',{ascending:false}).limit(2),
     db.from('body_records').select('*').eq('member_id',member.id).order('date',{ascending:true}).limit(8),
-    db.from('food_logs').select('*').eq('member_id',member.id).eq('date',t),
+    db.from('food_logs').select('*').eq('member_id',member.id).eq('date',rptDate),
     db.from('nutrition_goals').select('*').eq('member_id',member.id).maybeSingle(),
     fetchWorkoutProgram(),
   ]);
@@ -290,13 +303,22 @@ function renderPage() {
 
 function renderHeader(orm, prev, ls, rpt) {
   const bubbles = [ls.pt1, ls.pt2, ls.pt3].filter(Boolean);
+  const hasPrev = rptDateIdx < allRptDates.length - 1;
+  const hasNext = rptDateIdx > 0;
+  const navHtml = allRptDates.length > 1 ? `
+    <div class="rpt-nav">
+      <button class="rpt-nav-btn" onclick="goRpt(1)" ${hasPrev?'':'disabled'}>← 이전</button>
+      <span class="rpt-nav-date">${ko_date(rptDate)}</span>
+      <button class="rpt-nav-btn" onclick="goRpt(-1)" ${hasNext?'':'disabled'}>다음 →</button>
+    </div>` : '';
   return `
   <div class="page-top">
     <div class="pt-inner">
       <div class="pt-meta">
         <span class="pt-tag">주간 리포트</span>
-        <span class="pt-date">${rpt?.date || today()}</span>
+        <span class="pt-date">${rptDate}</span>
       </div>
+      ${navHtml}
       <div class="pt-title">${member.name} 님 리포트</div>
       ${rpt?.summary ? `<div class="pt-summary">${rpt.summary}</div>` : ''}
       ${bubbles.length ? `<div class="bubbles">${bubbles.map(b=>`<div class="bubble">${b}</div>`).join('')}</div>` : ''}
@@ -324,7 +346,7 @@ function renderCheckin() {
   const editMode = new URLSearchParams(location.search).get('edit_ci');
   if (ci && !editMode) {
     return `<div class="card">
-      <div class="card-hd"><div class="ico ic-o">📝</div><h2>오늘의 체크인</h2><span class="sub">${today()}</span></div>
+      <div class="card-hd"><div class="ico ic-o">📝</div><h2>오늘의 체크인</h2><span class="sub">${rptDate}</span></div>
       <div class="card-bd">
         <div class="already-bar">✅ 오늘 체크인 완료</div>
         <div class="ci-done">
@@ -340,7 +362,7 @@ function renderCheckin() {
   }
   const hasPain = ci?.pain === '있음';
   return `<div class="card">
-    <div class="card-hd"><div class="ico ic-o">📝</div><h2>오늘의 체크인</h2><span class="sub">${today()}</span></div>
+    <div class="card-hd"><div class="ico ic-o">📝</div><h2>오늘의 체크인</h2><span class="sub">${rptDate}</span></div>
     <div class="card-bd">
       ${editMode ? '<div class="already-bar">✏️ 수정 모드 — 다시 저장하면 오늘 기록이 업데이트됩니다.</div>' : ''}
       <form id="ci-form">
@@ -793,7 +815,7 @@ function renderTodayNutrition() {
   const t = computeTodayTotals(todayFoodLogs);
   return `<div class="card">
     <div class="card-hd">
-      <div class="ico ic-o">🥗</div><h2>오늘의 영양소 합계</h2><span class="sub">${today()}</span>
+      <div class="ico ic-o">🥗</div><h2>오늘의 영양소 합계</h2><span class="sub">${rptDate}</span>
       <button class="toggle-btn" id="goal-edit-btn" onclick="toggleGoalEdit()">${goalEditMode ? '취소 ✕' : '목표 설정 ✏️'}</button>
     </div>
     <div class="card-bd" id="today-nutrition-bd">
@@ -834,7 +856,7 @@ async function saveNutritionGoals() {
 }
 
 async function refreshTodayNutrition() {
-  const { data } = await db.from('food_logs').select('*').eq('member_id', member.id).eq('date', today());
+  const { data } = await db.from('food_logs').select('*').eq('member_id', member.id).eq('date', rptDate);
   todayFoodLogs = data || [];
   if (goalEditMode) return;
   const bd = document.getElementById('today-nutrition-bd');
@@ -1109,7 +1131,7 @@ function renderLearnedExercises() {
     </div>`).join('');
 
   return `<div class="card">
-    <div class="card-hd"><div class="ico ic-g">🏋️</div><h2>오늘 배운 운동</h2><span class="sub">${today()}</span></div>
+    <div class="card-hd"><div class="ico ic-g">🏋️</div><h2>오늘 배운 운동</h2><span class="sub">${rptDate}</span></div>
     <div class="card-bd">
       ${learnedExercises.length ? `<div class="next-edit-list">${items}</div>` : '<div class="empty-note" style="margin-bottom:4px;">오늘 배운 운동을 추가하세요.</div>'}
       <div class="action-row">
@@ -1186,6 +1208,24 @@ async function saveNextSteps() {
   if (error) { alert('저장 오류: ' + error.message); return; }
   rpt = data;
   initNextSteps();
+  renderPage();
+}
+
+async function goRpt(delta) {
+  const newIdx = rptDateIdx + delta;
+  if (newIdx < 0 || newIdx >= allRptDates.length) return;
+  rptDateIdx = newIdx;
+  rptDate = allRptDates[rptDateIdx];
+  const [r1, r2, r5] = await Promise.all([
+    db.from('checkins').select('*').eq('member_id',member.id).eq('date',rptDate).maybeSingle(),
+    db.from('weekly_reports').select('*').eq('member_id',member.id).eq('date',rptDate).maybeSingle(),
+    db.from('food_logs').select('*').eq('member_id',member.id).eq('date',rptDate),
+  ]);
+  ci = r1.data;
+  rpt = r2.data;
+  todayFoodLogs = r5.data || [];
+  initNextSteps();
+  initLearnedExercises();
   renderPage();
 }
 
