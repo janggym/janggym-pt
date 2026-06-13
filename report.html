@@ -214,6 +214,7 @@ let nutritionGoals = null;
 let goalEditMode = false;
 let workoutData = null;
 let workoutDayIdx = 0;
+let workoutError = null;
 let learnedExercises = [];
 let allWeeklyDates = [];
 let weeklyIdx = 0;
@@ -627,18 +628,21 @@ async function saveFoodLog() {
 }
 
 async function fetchWorkoutProgram() {
-  if (!member.sheets_id) return null;
+  workoutError = null;
+  if (!member.sheets_id) { workoutError = 'sheets_id 미설정'; return null; }
   const tabName = member.sheets_tab || member.name;
+  const url = `https://docs.google.com/spreadsheets/d/${member.sheets_id}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(tabName)}`;
   try {
-    const url = `https://docs.google.com/spreadsheets/d/${member.sheets_id}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(tabName)}`;
     const res = await fetch(url);
     const text = await res.text();
-    const match = text.match(/setResponse\(([\s\S]+)\);?\s*$/);
-    if (!match) return [];
+    const match = text.match(/setResponse\(([\s\S]+)\)/);
+    if (!match) { workoutError = `응답 파싱 실패 (탭명: "${tabName}")`; return []; }
     const json = JSON.parse(match[1]);
-    if (json.status === 'error') return [];
-    return parseWorkoutTable(json.table);
-  } catch { return []; }
+    if (json.status === 'error') { workoutError = `시트 오류: ${json.errors?.[0]?.detailed_message || json.errors?.[0]?.message || '탭 이름 확인 필요'}`; return []; }
+    const result = parseWorkoutTable(json.table);
+    if (!result.length) workoutError = `데이터 없음 (탭: "${tabName}", 행 수: ${json.table?.rows?.length ?? 0})`;
+    return result;
+  } catch(e) { workoutError = `fetch 오류: ${e.message}`; return []; }
 }
 
 function parseWorkoutTable(table) {
@@ -680,7 +684,10 @@ function renderWorkoutProgram() {
   if (!workoutData.length) {
     return `<div class="card">
       <div class="card-hd"><div class="ico ic-b">💪</div><h2>운동 프로그램</h2><span class="sub">Google Sheets</span></div>
-      <div class="card-bd"><div class="prog-load">등록된 운동 프로그램이 없습니다.</div></div>
+      <div class="card-bd">
+        <div class="prog-load">등록된 운동 프로그램이 없습니다.</div>
+        ${workoutError ? `<div style="font-size:11px;color:#E53E3E;margin-top:8px;word-break:break-all;">⚠️ ${workoutError}</div>` : ''}
+      </div>
     </div>`;
   }
 
