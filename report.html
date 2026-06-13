@@ -649,30 +649,32 @@ function parseWorkoutTable(table) {
   if (!table?.rows?.length) return [];
 
   const val = c => c == null ? '' : String(c.v ?? c.f ?? '').trim();
+  const HEADER_KEYWORDS = /^(excercise|exercise|운동명|target|sets|tempo|rep|weight|day)$/i;
 
-  // gviz가 첫 행을 헤더로 자동 인식했으면 cols[1].label에 값이 들어옴 → rows는 이미 데이터
-  // 그렇지 않으면 rows[0]이 헤더 행이므로 건너뜀
-  const colBLabel = (table.cols?.[1]?.label || '').trim();
-  const headerInCols = colBLabel && !/^(col[b\d]|column\s*b|^b$)/i.test(colBLabel);
-  const rows = headerInCols ? table.rows : table.rows.slice(1);
-
-  // B(1)=Day, C(2)=운동명, D(3)=Target, E(4)=Sets
+  // B(1)=Day, D(3)=운동명, E(4)=Target, F(5)=Sets, G(6)=Tempo, I(8)=Rep Range, J(9)=Weight
   const days = {}, order = [];
   let curDay = '';
 
-  for (const row of rows) {
+  for (const row of table.rows) {
     const cells = (row.c || []).map(val);
     const dayCell = cells[1] || '';
-    const name    = cells[2] || '';
-    const target  = cells[3] || '';
-    const sets    = cells[4] || '';
+    const name    = cells[3] || '';
 
-    if (!name) continue;
+    // 헤더 행 스킵
+    if (!name || HEADER_KEYWORDS.test(name)) continue;
+
     if (dayCell) curDay = dayCell;
     if (!curDay) continue;
 
     if (!days[curDay]) { days[curDay] = []; order.push(curDay); }
-    days[curDay].push({ name, target, sets });
+    days[curDay].push({
+      name,
+      target:    cells[4] || '',
+      sets:      cells[5] || '',
+      tempo:     cells[6] || '',
+      rep_range: cells[8] || '',
+      weight:    cells[9] || '',
+    });
   }
 
   return order.map(day => ({ day, exercises: days[day] }));
@@ -711,8 +713,11 @@ function buildExerciseRows(exercises) {
     <div class="prog-ex-row">
       <span class="prog-ex-name">${ex.name}</span>
       <div class="prog-ex-tags">
-        ${ex.sets   ? `<span class="prog-ex-tag tag-sets">${ex.sets} sets</span>` : ''}
-        ${ex.target ? `<span class="prog-ex-tag tag-reps">${ex.target}</span>` : ''}
+        ${ex.sets      ? `<span class="prog-ex-tag tag-sets">${ex.sets} sets</span>` : ''}
+        ${ex.rep_range ? `<span class="prog-ex-tag tag-reps">${ex.rep_range}</span>` : ''}
+        ${ex.target    ? `<span class="prog-ex-tag tag-reps">${ex.target}</span>` : ''}
+        ${ex.weight    ? `<span class="prog-ex-tag tag-sets">${ex.weight} kg</span>` : ''}
+        ${ex.tempo     ? `<span class="prog-ex-tag" style="background:#F3EEFF;color:#6B46C1;">${ex.tempo}</span>` : ''}
       </div>
     </div>`).join('');
 }
