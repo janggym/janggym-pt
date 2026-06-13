@@ -210,6 +210,7 @@ let nutritionGoals = null;
 let goalEditMode = false;
 let workoutData = null;
 let workoutDayIdx = 0;
+let learnedExercises = [];
 
 async function init() {
   if (!memberName) { renderError('URL에 ?m=이름 을 붙여주세요.'); return; }
@@ -237,6 +238,7 @@ async function init() {
   nutritionGoals = r6.data;
   workoutData    = r7 ?? [];
   initNextSteps();
+  initLearnedExercises();
   renderPage();
 }
 
@@ -255,6 +257,7 @@ function renderPage() {
     ${renderHeader(latestOrm, prevOrm, ls, rpt)}
     <div class="wrap">
       ${renderCheckin()}
+      ${renderLearnedExercises()}
       ${renderWorkoutProgram()}
       ${rpt ? renderSummary(ls, ch, ri) : ''}
       ${latestBody ? renderBody(latestBody, prevBody) : ''}
@@ -1089,6 +1092,57 @@ function renderNext() {
       </div>
     </div>
   </div>`;
+}
+
+function initLearnedExercises() {
+  learnedExercises = rpt
+    ? [1,2,3,4,5].map(i => rpt[`learned${i}`] || '').filter(s => s)
+    : [];
+}
+
+function renderLearnedExercises() {
+  const items = learnedExercises.map((ex, i) => `
+    <div class="next-edit-item">
+      <div class="next-edit-num">${i + 1}</div>
+      <input class="fld" style="flex:1;" value="${ex.replace(/"/g,'&quot;')}" placeholder="운동명" oninput="learnedExercises[${i}]=this.value">
+      <button class="next-del-btn" title="삭제" onclick="deleteLearnedExercise(${i})">✕</button>
+    </div>`).join('');
+
+  return `<div class="card">
+    <div class="card-hd"><div class="ico ic-g">🏋️</div><h2>오늘 배운 운동</h2><span class="sub">${today()}</span></div>
+    <div class="card-bd">
+      ${learnedExercises.length ? `<div class="next-edit-list">${items}</div>` : '<div class="empty-note" style="margin-bottom:4px;">오늘 배운 운동을 추가하세요.</div>'}
+      <div class="action-row">
+        ${learnedExercises.length < 5 ? `<button class="btn-add" onclick="addLearnedExercise()">+ 운동 추가</button>` : ''}
+        ${learnedExercises.length > 0 ? `<button class="btn-save" onclick="saveLearnedExercises()">💾 저장</button>` : ''}
+      </div>
+    </div>
+  </div>`;
+}
+
+function addLearnedExercise() {
+  if (learnedExercises.length >= 5) return;
+  learnedExercises.push('');
+  renderPage();
+}
+
+function deleteLearnedExercise(i) {
+  learnedExercises.splice(i, 1);
+  renderPage();
+}
+
+async function saveLearnedExercises() {
+  const payload = { member_id: member.id, date: rpt?.date || today() };
+  [0,1,2,3,4].forEach(i => {
+    payload[`learned${i+1}`] = learnedExercises[i]?.trim() || null;
+  });
+  const { data, error } = await db.from('weekly_reports')
+    .upsert(payload, { onConflict: 'member_id,date' })
+    .select().single();
+  if (error) { alert('저장 오류: ' + error.message); return; }
+  rpt = data;
+  initLearnedExercises();
+  renderPage();
 }
 
 function initNextSteps() {
