@@ -212,9 +212,6 @@ let lastFoodResult = null;
 let todayFoodLogs = [];
 let nutritionGoals = null;
 let goalEditMode = false;
-let workoutData = null;
-let workoutDayIdx = 0;
-let workoutError = null;
 let workoutLogs = [];
 let learnedExercises = [];
 let allWeeklyDates = [];
@@ -229,8 +226,6 @@ async function init() {
   if (!mData) { renderError(`'${memberName}' 회원을 찾을 수 없습니다.`); return; }
   member = mData;
 
-  workoutDayIdx = 0;
-
   // weekly_reports 날짜 목록 (내림차순)
   const { data: wDates } = await db.from('weekly_reports').select('date').eq('member_id',member.id).order('date',{ascending:false});
   allWeeklyDates = (wDates || []).map(r => r.date);
@@ -240,7 +235,7 @@ async function init() {
   const t = today();
   nutritionDate = t;
 
-  const [r1,r2,r3,r4,r5,r6,r7,r8,r9] = await Promise.all([
+  const [r1,r2,r3,r4,r5,r6,r7,r8] = await Promise.all([
     db.from('checkins').select('*').eq('member_id',member.id).eq('date',t).maybeSingle(),
     latestRptDate
       ? db.from('weekly_reports').select('*').eq('member_id',member.id).eq('date',latestRptDate).maybeSingle()
@@ -249,7 +244,6 @@ async function init() {
     db.from('body_records').select('*').eq('member_id',member.id).order('date',{ascending:true}).limit(8),
     db.from('food_logs').select('*').eq('member_id',member.id).eq('date',t),
     db.from('nutrition_goals').select('*').eq('member_id',member.id).maybeSingle(),
-    fetchWorkoutProgram(),
     db.from('workout_logs').select('*').eq('member_id',member.id).eq('date',t),
     db.from('food_logs').select('date').eq('member_id',member.id).order('date',{ascending:false}),
   ]);
@@ -259,9 +253,8 @@ async function init() {
   bodyRows       = r4.data || [];
   todayFoodLogs  = r5.data || [];
   nutritionGoals = r6.data;
-  workoutData    = r7 ?? [];
-  workoutLogs    = r8.data || [];
-  allFoodDates   = [...new Set((r9.data || []).map(r => r.date))];
+  workoutLogs    = r7.data || [];
+  allFoodDates   = [...new Set((r8.data || []).map(r => r.date))];
   initNextSteps();
   initLearnedExercises();
   renderPage();
@@ -636,139 +629,17 @@ async function saveFoodLog() {
   await refreshTodayNutrition();
 }
 
-async function fetchWorkoutProgram() {
-  workoutError = null;
-  if (!member.sheets_id) { workoutError = 'sheets_id 미설정'; return null; }
-  const tabName = member.sheets_tab || member.name;
-  const url = `https://docs.google.com/spreadsheets/d/${member.sheets_id}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(tabName)}`;
-  try {
-    const res = await fetch(url);
-    const text = await res.text();
-    const match = text.match(/setResponse\(([\s\S]+)\)/);
-    if (!match) { workoutError = `응답 파싱 실패 (탭명: "${tabName}")`; return []; }
-    const json = JSON.parse(match[1]);
-    if (json.status === 'error') { workoutError = `시트 오류: ${json.errors?.[0]?.detailed_message || json.errors?.[0]?.message || '탭 이름 확인 필요'}`; return []; }
-    const result = parseWorkoutTable(json.table);
-    if (!result.length) workoutError = `데이터 없음 (탭: "${tabName}", 행 수: ${json.table?.rows?.length ?? 0})`;
-    return result;
-  } catch(e) { workoutError = `fetch 오류: ${e.message}`; return []; }
-}
-
-function parseWorkoutTable(table) {
-  if (!table?.rows?.length) return [];
-
-  const val = c => c == null ? '' : String(c.v ?? c.f ?? '').trim();
-  const HEADER_KEYWORDS = /^(ex[ce]r[ce]is|운동명|target|sets|tempo|rep|weight|day\s*\d*$)/i;
-
-  // B(1)=Day, D(3)=운동명, E(4)=Target, F(5)=Sets, G(6)=Tempo, I(8)=Rep Range, J(9)=Weight
-  const days = {}, order = [];
-  let curDay = '';
-
-  for (const row of table.rows) {
-    const cells = (row.c || []).map(val);
-    const dayCell = cells[1] || '';
-    const name    = cells[3] || '';
-
-    // 헤더 행 스킵
-    if (!name || HEADER_KEYWORDS.test(name)) continue;
-
-    if (dayCell) curDay = dayCell;
-    if (!curDay) continue;
-
-    if (!days[curDay]) { days[curDay] = []; order.push(curDay); }
-    days[curDay].push({
-      name,
-      target:    cells[4] || '',
-      sets:      cells[5] || '',
-      tempo:     cells[6] || '',
-      rep_range: cells[8] || '',
-      weight:    cells[9] || '',
-    });
-  }
-
-  return order.map(day => ({ day, exercises: days[day] }));
-}
-
 function renderWorkoutProgram() {
-  if (!workoutData) return '';
-
-  if (!workoutData.length) {
-    return `<div class="card">
-      <div class="card-hd"><div class="ico ic-b">💪</div><h2>운동 프로그램</h2><span class="sub">Google Sheets</span></div>
-      <div class="card-bd">
-        <div class="prog-load">등록된 운동 프로그램이 없습니다.</div>
-        ${workoutError ? `<div style="font-size:11px;color:#E53E3E;margin-top:8px;word-break:break-all;">⚠️ ${workoutError}</div>` : ''}
-      </div>
-    </div>`;
-  }
-
-  const idx = Math.min(workoutDayIdx, workoutData.length - 1);
-  const tabs = workoutData.map((d, i) =>
-    `<button class="prog-day-btn${i === idx ? ' active' : ''}" onclick="showWorkoutDay(${i})">${d.day}</button>`
-  ).join('');
-
+  if (!member.sheets_id) return '';
+  const url = `https://docs.google.com/spreadsheets/d/${member.sheets_id}`;
   return `<div class="card">
-    <div class="card-hd"><div class="ico ic-b">💪</div><h2>운동 프로그램</h2><span class="sub">Google Sheets</span></div>
+    <div class="card-hd"><div class="ico ic-b">💪</div><h2>운동 프로그램</h2></div>
     <div class="card-bd">
-      <div class="prog-days">${tabs}</div>
-      <div id="workout-exercises">${buildExerciseRows(workoutData[idx].exercises, workoutData[idx].day)}</div>
+      <a href="${url}" target="_blank" style="display:flex;align-items:center;justify-content:center;gap:8px;background:var(--blue-lt);color:var(--blue);border-radius:10px;padding:14px;font-size:14px;font-weight:700;text-decoration:none;">
+        📊 Google Sheets에서 열기
+      </a>
     </div>
   </div>`;
-}
-
-function buildExerciseRows(exercises, day) {
-  if (!exercises?.length) return '<div class="prog-load">운동이 없습니다.</div>';
-  const rows = exercises.map((ex, i) => {
-    const log = workoutLogs.find(l => l.day === day && l.exercise_name === ex.name);
-    const safeDay  = (day  || '').replace(/"/g, '&quot;');
-    const safeName = ex.name.replace(/"/g, '&quot;');
-    return `
-    <div class="prog-ex-row" style="flex-wrap:wrap;gap:6px;">
-      <div style="flex:1;min-width:0;">
-        <div class="prog-ex-name">${ex.name}</div>
-        <div class="prog-ex-tags" style="margin-top:4px;">
-          ${ex.sets      ? `<span class="prog-ex-tag tag-sets">${ex.sets} sets</span>` : ''}
-          ${ex.rep_range ? `<span class="prog-ex-tag tag-reps">${ex.rep_range}</span>` : ''}
-          ${ex.target    ? `<span class="prog-ex-tag tag-reps">${ex.target}</span>` : ''}
-          ${ex.weight    ? `<span class="prog-ex-tag tag-sets">${ex.weight} kg</span>` : ''}
-          ${ex.tempo     ? `<span class="prog-ex-tag" style="background:#F3EEFF;color:#6B46C1;">${ex.tempo}</span>` : ''}
-        </div>
-      </div>
-      <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
-        <input class="reps-inp" type="text" placeholder="횟수 입력" value="${log?.reps_done || ''}"
-          data-day="${safeDay}" data-name="${safeName}"
-          style="width:90px;border:1.5px solid var(--border);border-radius:8px;padding:6px 10px;font-size:13px;font-family:inherit;outline:none;"
-          onfocus="this.style.borderColor='var(--blue)'" onblur="this.style.borderColor='var(--border)'">
-        <button onclick="saveOneRep(this)" style="background:var(--blue-lt);border:none;color:var(--blue);padding:6px 12px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;">저장</button>
-      </div>
-    </div>`;
-  }).join('');
-  return rows;
-}
-
-function showWorkoutDay(idx) {
-  workoutDayIdx = idx;
-  document.querySelectorAll('.prog-day-btn').forEach((btn, i) => btn.classList.toggle('active', i === idx));
-  const el = document.getElementById('workout-exercises');
-  if (el && workoutData[idx]) el.innerHTML = buildExerciseRows(workoutData[idx].exercises, workoutData[idx].day);
-}
-
-async function saveOneRep(btn) {
-  const inp  = btn.previousElementSibling;
-  const day  = inp.dataset.day;
-  const name = inp.dataset.name;
-  const reps = inp.value.trim();
-  if (!reps) return;
-  const { error } = await db.from('workout_logs').upsert(
-    { member_id: member.id, date: today(), day, exercise_name: name, reps_done: reps },
-    { onConflict: 'member_id,date,day,exercise_name' }
-  );
-  if (error) { alert('저장 오류: ' + error.message); return; }
-  const existing = workoutLogs.find(l => l.day === day && l.exercise_name === name);
-  if (existing) existing.reps_done = reps;
-  else workoutLogs.push({ member_id: member.id, date: today(), day, exercise_name: name, reps_done: reps });
-  btn.textContent = '✅';
-  setTimeout(() => { btn.textContent = '저장'; }, 1500);
 }
 
 function computeTodayTotals(logs) {
