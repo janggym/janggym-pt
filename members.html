@@ -267,7 +267,7 @@ function openEditModal(id) {
   document.getElementById('ef-sheets-tab').value = m.sheets_tab || '';
   // 링크 목록 초기화
   document.getElementById('ef-links-list').innerHTML = '';
-  const links = m.program_links || [];
+  const links = typeof m.program_links === 'string' ? JSON.parse(m.program_links || '[]') : (m.program_links || []);
   links.forEach(l => addLinkRow(l.label, l.url));
   document.getElementById('edit-modal').classList.add('show');
 }
@@ -288,7 +288,7 @@ document.getElementById('edit-form').addEventListener('submit', async e => {
   const memo      = document.getElementById('ef-memo').value.trim();
   const sheets_id     = document.getElementById('ef-sheets-id').value.trim() || null;
   const sheets_tab    = document.getElementById('ef-sheets-tab').value.trim() || null;
-  const program_links = getLinkRows();
+  const program_links = JSON.stringify(getLinkRows());
   if (!name) return;
 
   const { error } = await db.from('members').update({ name, phone, memo, sheets_id, sheets_tab, program_links }).eq('id', id);

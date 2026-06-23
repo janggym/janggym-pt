@@ -630,7 +630,7 @@ async function saveFoodLog() {
 }
 
 function renderWorkoutProgram() {
-  const links = member.program_links || [];
+  const links = typeof member.program_links === 'string' ? JSON.parse(member.program_links || '[]') : (member.program_links || []);
   if (!member.sheets_id && !links.length) return '';
 
   const mainLink = member.sheets_id
