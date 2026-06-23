@@ -288,7 +288,9 @@ document.getElementById('edit-form').addEventListener('submit', async e => {
   const memo      = document.getElementById('ef-memo').value.trim();
   const sheets_id     = document.getElementById('ef-sheets-id').value.trim() || null;
   const sheets_tab    = document.getElementById('ef-sheets-tab').value.trim() || null;
-  const program_links = JSON.stringify(getLinkRows());
+  const _links = getLinkRows();
+  alert('수집된 링크: ' + JSON.stringify(_links));
+  const program_links = JSON.stringify(_links);
   if (!name) return;
 
   const { error } = await db.from('members').update({ name, phone, memo, sheets_id, sheets_tab, program_links }).eq('id', id);
