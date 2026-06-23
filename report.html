@@ -630,14 +630,28 @@ async function saveFoodLog() {
 }
 
 function renderWorkoutProgram() {
-  if (!member.sheets_id) return '';
-  const url = `https://docs.google.com/spreadsheets/d/${member.sheets_id}`;
+  const links = member.program_links || [];
+  if (!member.sheets_id && !links.length) return '';
+
+  const mainLink = member.sheets_id
+    ? `<a href="https://docs.google.com/spreadsheets/d/${member.sheets_id}" target="_blank"
+        style="display:flex;align-items:center;justify-content:center;gap:8px;background:var(--blue-lt);color:var(--blue);border-radius:10px;padding:14px;font-size:14px;font-weight:700;text-decoration:none;margin-bottom:${links.length?'10px':'0'};">
+        📊 전체 프로그램 열기
+      </a>` : '';
+
+  const weekLinks = links.map(l =>
+    `<a href="${l.url}" target="_blank"
+      style="display:flex;align-items:center;justify-content:space-between;padding:11px 14px;border:1.5px solid var(--border);border-radius:10px;text-decoration:none;color:#1A202C;font-size:13px;font-weight:600;">
+      <span>📋 ${l.label}</span>
+      <span style="color:var(--blue);font-size:12px;">열기 →</span>
+    </a>`
+  ).join('');
+
   return `<div class="card">
     <div class="card-hd"><div class="ico ic-b">💪</div><h2>운동 프로그램</h2></div>
-    <div class="card-bd">
-      <a href="${url}" target="_blank" style="display:flex;align-items:center;justify-content:center;gap:8px;background:var(--blue-lt);color:var(--blue);border-radius:10px;padding:14px;font-size:14px;font-weight:700;text-decoration:none;">
-        📊 Google Sheets에서 열기
-      </a>
+    <div class="card-bd" style="display:flex;flex-direction:column;gap:8px;">
+      ${mainLink}
+      ${weekLinks}
     </div>
   </div>`;
 }

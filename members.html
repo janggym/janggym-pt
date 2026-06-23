@@ -145,6 +145,11 @@
         <label>시트 탭 이름 <span style="font-weight:400;color:var(--gray);">(하단 탭)</span></label>
         <input id="ef-sheets-tab" class="field" placeholder="예: w1, 박소영, Sheet1">
       </div>
+      <div class="form-group">
+        <label>주차별 프로그램 링크</label>
+        <div id="ef-links-list" style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px;"></div>
+        <button type="button" class="btn btn-outline btn-sm" onclick="addLinkRow()">+ 링크 추가</button>
+      </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-outline" style="color:#E53E3E;border-color:#E53E3E;" onclick="deleteMember()">삭제</button>
         <button type="button" class="btn btn-outline" onclick="closeEditModal()">취소</button>
@@ -233,15 +238,37 @@ document.getElementById('add-form').addEventListener('submit', async e => {
   await load();
 });
 
+function addLinkRow(label = '', url = '') {
+  const list = document.getElementById('ef-links-list');
+  const row = document.createElement('div');
+  row.style.cssText = 'display:flex;gap:6px;align-items:center;';
+  row.innerHTML = `
+    <input class="field" style="width:80px;flex-shrink:0;" placeholder="1주차" value="${label.replace(/"/g,'&quot;')}">
+    <input class="field" style="flex:1;" placeholder="https://..." value="${url.replace(/"/g,'&quot;')}">
+    <button type="button" style="background:none;border:none;color:#E53E3E;font-size:18px;cursor:pointer;padding:0 4px;" onclick="this.parentElement.remove()">✕</button>`;
+  list.appendChild(row);
+}
+
+function getLinkRows() {
+  return [...document.querySelectorAll('#ef-links-list > div')].map(row => {
+    const inputs = row.querySelectorAll('input');
+    return { label: inputs[0].value.trim(), url: inputs[1].value.trim() };
+  }).filter(r => r.label && r.url);
+}
+
 function openEditModal(id) {
   const m = members.find(m => m.id === id);
   if (!m) return;
-  document.getElementById('ef-id').value       = m.id;
-  document.getElementById('ef-name').value     = m.name;
-  document.getElementById('ef-phone').value    = m.phone || '';
-  document.getElementById('ef-memo').value     = m.memo || '';
+  document.getElementById('ef-id').value         = m.id;
+  document.getElementById('ef-name').value       = m.name;
+  document.getElementById('ef-phone').value      = m.phone || '';
+  document.getElementById('ef-memo').value       = m.memo || '';
   document.getElementById('ef-sheets-id').value  = m.sheets_id  || '';
   document.getElementById('ef-sheets-tab').value = m.sheets_tab || '';
+  // 링크 목록 초기화
+  document.getElementById('ef-links-list').innerHTML = '';
+  const links = m.program_links || [];
+  links.forEach(l => addLinkRow(l.label, l.url));
   document.getElementById('edit-modal').classList.add('show');
 }
 
@@ -259,11 +286,12 @@ document.getElementById('edit-form').addEventListener('submit', async e => {
   const name      = document.getElementById('ef-name').value.trim();
   const phone     = document.getElementById('ef-phone').value.trim();
   const memo      = document.getElementById('ef-memo').value.trim();
-  const sheets_id  = document.getElementById('ef-sheets-id').value.trim() || null;
-  const sheets_tab = document.getElementById('ef-sheets-tab').value.trim() || null;
+  const sheets_id     = document.getElementById('ef-sheets-id').value.trim() || null;
+  const sheets_tab    = document.getElementById('ef-sheets-tab').value.trim() || null;
+  const program_links = getLinkRows();
   if (!name) return;
 
-  const { error } = await db.from('members').update({ name, phone, memo, sheets_id, sheets_tab }).eq('id', id);
+  const { error } = await db.from('members').update({ name, phone, memo, sheets_id, sheets_tab, program_links }).eq('id', id);
   if (error) { alert('오류: ' + error.message); return; }
 
   closeEditModal();
