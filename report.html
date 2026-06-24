@@ -220,6 +220,8 @@ let allWeeklyDates = [];
 let nutritionDate = '';
 let allFoodDates = [];
 let weeklyIdx = 0;
+let learnedDate = '';
+let allLearnedDates = [];
 
 async function init() {
   if (!memberName) { renderError('URL에 ?m=이름 을 붙여주세요.'); return; }
@@ -238,7 +240,7 @@ async function init() {
   weeklyIdx = 0;
   const latestRptDate = existingDates[0] || null;
 
-  const [r1,r2,r3,r4,r5,r6,r7,r8] = await Promise.all([
+  const [r1,r2,r3,r4,r5,r6,r7,r8,r9] = await Promise.all([
     db.from('checkins').select('*').eq('member_id',member.id).eq('date',t).maybeSingle(),
     latestRptDate
       ? db.from('weekly_reports').select('*').eq('member_id',member.id).eq('date',latestRptDate).maybeSingle()
@@ -249,6 +251,7 @@ async function init() {
     db.from('nutrition_goals').select('*').eq('member_id',member.id).maybeSingle(),
     db.from('workout_logs').select('*').eq('member_id',member.id).eq('date',t),
     db.from('food_logs').select('date').eq('member_id',member.id).order('date',{ascending:false}),
+    db.from('learned_logs').select('*').eq('member_id',member.id).order('date',{ascending:false}),
   ]);
   ci             = r1.data;
   rpt            = r2.data;
@@ -258,8 +261,14 @@ async function init() {
   nutritionGoals = r6.data;
   workoutLogs    = r7.data || [];
   allFoodDates   = [...new Set((r8.data || []).map(r => r.date))];
+
+  const learnedRows = r9.data || [];
+  allLearnedDates = learnedRows.map(r => r.date);
+  learnedDate = t;
+  const todayLearned = learnedRows.find(r => r.date === t);
+  learnedExercises = todayLearned ? (todayLearned.exercises || []) : [];
+
   initNextSteps();
-  initLearnedExercises();
   renderPage();
 }
 
@@ -1307,12 +1316,6 @@ function renderWeeklyNav() {
   </div>`;
 }
 
-function initLearnedExercises() {
-  learnedExercises = rpt
-    ? [1,2,3,4,5].map(i => rpt[`learned${i}`] || '').filter(s => s)
-    : [];
-}
-
 function renderLearnedExercises() {
   const items = learnedExercises.map((ex, i) => `
     <div class="next-edit-item">
@@ -1321,22 +1324,20 @@ function renderLearnedExercises() {
       <button class="next-del-btn" title="삭제" onclick="deleteLearnedExercise(${i})">✕</button>
     </div>`).join('');
 
-  const hasDates = allWeeklyDates.length > 0;
-  const curDate  = allWeeklyDates[weeklyIdx] || today();
-  const hasPrev  = weeklyIdx < allWeeklyDates.length - 1;
-  const hasNext  = weeklyIdx > 0;
+  const dateIdx = allLearnedDates.indexOf(learnedDate);
+  const hasPrev = dateIdx < allLearnedDates.length - 1 || !allLearnedDates.includes(learnedDate);
+  const hasNext = learnedDate < today();
   const navBtnStyle = 'background:none;border:none;font-size:18px;cursor:pointer;padding:0 4px;color:var(--blue);';
 
   return `<div class="card">
     <div class="card-hd" style="flex-wrap:wrap;gap:6px;">
       <div class="ico ic-g">🏋️</div>
       <h2>배운 운동</h2>
-      ${hasDates ? `
       <div style="display:flex;align-items:center;gap:4px;margin-left:auto;">
-        <button style="${navBtnStyle}opacity:${hasPrev?1:.3}" onclick="goRpt(1)" ${hasPrev?'':'disabled'}>◀</button>
-        <span class="sub" style="min-width:84px;text-align:center;">${curDate}</span>
-        <button style="${navBtnStyle}opacity:${hasNext?1:.3}" onclick="goRpt(-1)" ${hasNext?'':'disabled'}>▶</button>
-      </div>` : `<span class="sub">${curDate}</span>`}
+        <button style="${navBtnStyle}opacity:${hasPrev?1:.3}" onclick="goLearnedDate(-1)" ${hasPrev?'':'disabled'}>◀</button>
+        <span class="sub" style="min-width:84px;text-align:center;">${learnedDate}</span>
+        <button style="${navBtnStyle}opacity:${hasNext?1:.3}" onclick="goLearnedDate(1)" ${hasNext?'':'disabled'}>▶</button>
+      </div>
     </div>
     <div class="card-bd">
       ${learnedExercises.length ? `<div class="next-edit-list">${items}</div>` : '<div class="empty-note" style="margin-bottom:4px;">배운 운동을 추가하세요.</div>'}
@@ -1359,17 +1360,33 @@ function deleteLearnedExercise(i) {
   renderPage();
 }
 
+async function goLearnedDate(delta) {
+  const idx = allLearnedDates.indexOf(learnedDate);
+  let newDate;
+  if (delta === -1) {
+    if (idx === -1) newDate = allLearnedDates[0];
+    else if (idx < allLearnedDates.length - 1) newDate = allLearnedDates[idx + 1];
+    else return;
+  } else {
+    if (idx <= 0) newDate = today();
+    else newDate = allLearnedDates[idx - 1];
+  }
+  if (!newDate || newDate > today()) newDate = today();
+  learnedDate = newDate;
+  const { data } = await db.from('learned_logs').select('*').eq('member_id', member.id).eq('date', learnedDate).maybeSingle();
+  learnedExercises = data ? (data.exercises || []) : [];
+  renderPage();
+}
+
 async function saveLearnedExercises() {
-  const payload = { member_id: member.id, date: rpt?.date || today() };
-  [0,1,2,3,4].forEach(i => {
-    payload[`learned${i+1}`] = learnedExercises[i]?.trim() || null;
-  });
-  const { data, error } = await db.from('weekly_reports')
-    .upsert(payload, { onConflict: 'member_id,date' })
-    .select().single();
+  const exList = learnedExercises.map(e => e.trim()).filter(Boolean);
+  const { error } = await db.from('learned_logs')
+    .upsert({ member_id: member.id, date: learnedDate, exercises: exList }, { onConflict: 'member_id,date' });
   if (error) { alert('저장 오류: ' + error.message); return; }
-  rpt = data;
-  initLearnedExercises();
+  if (!allLearnedDates.includes(learnedDate)) {
+    allLearnedDates = [learnedDate, ...allLearnedDates].sort((a,b) => b.localeCompare(a));
+  }
+  learnedExercises = exList;
   renderPage();
 }
 
@@ -1426,7 +1443,6 @@ async function goRpt(delta) {
   coachEditMode = false;
   memberCommentMode = false;
   initNextSteps();
-  initLearnedExercises();
   renderPage();
 }
 
