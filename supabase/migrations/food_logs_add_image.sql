@@ -1,0 +1,1 @@
+ALTER TABLE food_logs ADD COLUMN IF NOT EXISTS image_data TEXT;
