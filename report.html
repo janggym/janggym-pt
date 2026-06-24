@@ -207,6 +207,7 @@ const params = new URLSearchParams(location.search);
 const memberName = (params.get('m') || '').trim();
 let member, ci, rpt, orms, bodyRows;
 let coachEditMode = false;
+let memberCommentMode = false;
 let nextSteps = [];
 let lastFoodResult = null;
 let lastFoodImageData = null;
@@ -285,6 +286,7 @@ function renderPage() {
       ${latestOrm ? renderOrmTable(latestOrm, prevOrm) : ''}
       ${renderWeeklyNav()}
       ${renderCoach(rpt)}
+      ${renderMemberComment(rpt)}
       ${renderLearnedExercises()}
       ${renderNext()}
     </div>`;
@@ -1232,6 +1234,43 @@ function renderCoach(rpt) {
   </div>`;
 }
 
+function renderMemberComment(rpt) {
+  if (memberCommentMode) {
+    return `<div class="card">
+      <div class="card-hd"><div class="ico ic-g">✍️</div><h2>회원 코멘트</h2></div>
+      <div class="card-bd">
+        <span class="ml" style="margin-top:0;">이번 주 느낀 점</span>
+        <textarea id="f-member-comment" class="fld" rows="4" placeholder="이번 주 운동하면서 느낀 점, 힘들었던 것, 좋았던 것 등 자유롭게 작성해주세요.">${rpt?.member_comment||''}</textarea>
+        <div class="action-row" style="margin-top:14px;">
+          <button class="btn-save" onclick="saveMemberComment()">💾 저장</button>
+          <button class="btn-add" style="border-style:solid;" onclick="memberCommentMode=false;renderPage()">취소</button>
+        </div>
+      </div>
+    </div>`;
+  }
+  return `<div class="card">
+    <div class="card-hd"><div class="ico ic-g">✍️</div><h2>회원 코멘트</h2>
+      <button class="toggle-btn" onclick="memberCommentMode=true;renderPage()">수정 ✏️</button>
+    </div>
+    <div class="card-bd">
+      ${rpt?.member_comment
+        ? `<div class="coach-text" style="margin-bottom:0;">${rpt.member_comment}</div>`
+        : '<div class="empty-note">이번 주 느낀 점을 작성해보세요.</div>'}
+    </div>
+  </div>`;
+}
+
+async function saveMemberComment() {
+  const comment = (document.getElementById('f-member-comment')?.value || '').trim();
+  const { data, error } = await db.from('weekly_reports')
+    .upsert({ member_id: member.id, date: rpt?.date || today(), member_comment: comment || null }, { onConflict: 'member_id,date' })
+    .select().single();
+  if (error) { alert('저장 오류: ' + error.message); return; }
+  rpt = data;
+  memberCommentMode = false;
+  renderPage();
+}
+
 function renderNext() {
   const items = nextSteps.map((s, i) => `
     <div class="next-edit-item">
@@ -1368,6 +1407,8 @@ async function goRpt(delta) {
   weeklyIdx = newIdx;
   const { data } = await db.from('weekly_reports').select('*').eq('member_id',member.id).eq('date',allWeeklyDates[weeklyIdx]).maybeSingle();
   rpt = data;
+  coachEditMode = false;
+  memberCommentMode = false;
   initNextSteps();
   initLearnedExercises();
   renderPage();
