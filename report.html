@@ -264,9 +264,17 @@ async function init() {
 
   const learnedRows = r9.data || [];
   allLearnedDates = learnedRows.map(r => r.date);
-  learnedDate = t;
   const todayLearned = learnedRows.find(r => r.date === t);
-  learnedExercises = todayLearned ? (todayLearned.exercises || []) : [];
+  if (todayLearned) {
+    learnedDate = t;
+    learnedExercises = todayLearned.exercises || [];
+  } else if (learnedRows.length > 0) {
+    learnedDate = learnedRows[0].date;
+    learnedExercises = learnedRows[0].exercises || [];
+  } else {
+    learnedDate = t;
+    learnedExercises = [];
+  }
 
   initNextSteps();
   renderPage();
