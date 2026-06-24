@@ -228,15 +228,15 @@ async function init() {
   if (!mData) { renderError(`'${memberName}' 회원을 찾을 수 없습니다.`); return; }
   member = mData;
 
+  const t = today();
+  nutritionDate = t;
+
   // weekly_reports 날짜 목록 (내림차순) — 오늘 날짜를 항상 맨 앞에 포함
   const { data: wDates } = await db.from('weekly_reports').select('date').eq('member_id',member.id).order('date',{ascending:false});
   const existingDates = (wDates || []).map(r => r.date);
   allWeeklyDates = existingDates.includes(t) ? existingDates : [t, ...existingDates];
   weeklyIdx = 0;
   const latestRptDate = existingDates[0] || null;
-
-  const t = today();
-  nutritionDate = t;
 
   const [r1,r2,r3,r4,r5,r6,r7,r8] = await Promise.all([
     db.from('checkins').select('*').eq('member_id',member.id).eq('date',t).maybeSingle(),
