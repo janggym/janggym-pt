@@ -524,20 +524,56 @@ function switchFoodTab(mode) {
   renderPage();
 }
 
+let inbodyInputMode = 'photo';
+
 function renderInbodyAI() {
+  const isPhoto = inbodyInputMode === 'photo';
+  const tabStyle = active => `padding:7px 18px;border-radius:999px;font-size:13px;font-weight:700;cursor:pointer;border:none;font-family:inherit;transition:.15s;${active ? 'background:var(--blue);color:#fff;' : 'background:var(--border);color:var(--gray);'}`;
   return `<div class="card">
-    <div class="card-hd"><div class="ico ic-b">🤖</div><h2>AI 인바디 인식</h2><span class="sub">사진으로 자동 입력</span></div>
+    <div class="card-hd"><div class="ico ic-b">🤖</div><h2>인바디 입력</h2></div>
     <div class="card-bd">
-      <label class="ai-upload-area" for="ai-file-input">
-        <div style="font-size:32px;margin-bottom:8px;">📷</div>
-        <div style="font-weight:600;margin-bottom:4px;">인바디 결과지 사진 업로드</div>
-        <div>클릭하거나 파일을 선택하세요</div>
-        <input type="file" id="ai-file-input" accept="image/*">
-      </label>
-      <div id="ai-status" class="ai-status"></div>
-      <div id="ai-result" style="display:none;"></div>
+      <div style="display:flex;gap:8px;margin-bottom:14px;">
+        <button style="${tabStyle(isPhoto)}" onclick="switchInbodyTab('photo')">📷 사진 인식</button>
+        <button style="${tabStyle(!isPhoto)}" onclick="switchInbodyTab('manual')">✏️ 직접 입력</button>
+      </div>
+      ${isPhoto ? `
+        <label class="ai-upload-area" for="ai-file-input">
+          <div style="font-size:32px;margin-bottom:8px;">📷</div>
+          <div style="font-weight:600;margin-bottom:4px;">인바디 결과지 사진 업로드</div>
+          <div>클릭하거나 파일을 선택하세요</div>
+          <input type="file" id="ai-file-input" accept="image/*">
+        </label>
+        <div id="ai-status" class="ai-status"></div>
+        <div id="ai-result" style="display:none;"></div>` : `
+        <div style="display:flex;flex-direction:column;gap:10px;">
+          <div style="display:flex;align-items:center;gap:10px;">
+            <span style="font-size:13px;font-weight:600;color:#4A5568;width:64px;flex-shrink:0;">날짜</span>
+            <input id="ib-date" type="date" class="fld" style="flex:1;" value="${today()}">
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <span style="font-size:13px;font-weight:600;color:#4A5568;width:64px;flex-shrink:0;">체중</span>
+            <input id="ib-weight" type="number" step="0.1" class="fld" style="flex:1;" placeholder="kg">
+            <span style="font-size:13px;color:var(--gray);width:24px;">kg</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <span style="font-size:13px;font-weight:600;color:#4A5568;width:64px;flex-shrink:0;">체지방률</span>
+            <input id="ib-fat" type="number" step="0.1" class="fld" style="flex:1;" placeholder="%">
+            <span style="font-size:13px;color:var(--gray);width:24px;">%</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <span style="font-size:13px;font-weight:600;color:#4A5568;width:64px;flex-shrink:0;">골격근량</span>
+            <input id="ib-muscle" type="number" step="0.1" class="fld" style="flex:1;" placeholder="kg">
+            <span style="font-size:13px;color:var(--gray);width:24px;">kg</span>
+          </div>
+          <button class="ai-save-btn" style="background:var(--blue);margin-top:4px;" onclick="saveInbodyManual()">💾 저장</button>
+        </div>`}
     </div>
   </div>`;
+}
+
+function switchInbodyTab(mode) {
+  inbodyInputMode = mode;
+  renderPage();
 }
 
 function fileToBase64(file) {
@@ -992,6 +1028,33 @@ async function saveInbodyAI(weight, fat_pct, muscle_kg) {
   if (error) { alert('저장 오류: ' + error.message); return; }
   const { data } = await db.from('body_records').select('*').eq('member_id', member.id).order('date', { ascending: true }).limit(8);
   bodyRows = data || [];
+  renderPage();
+}
+
+async function saveInbodyManual() {
+  const date     = document.getElementById('ib-date')?.value   || today();
+  const weight   = document.getElementById('ib-weight')?.value;
+  const fat      = document.getElementById('ib-fat')?.value;
+  const muscle   = document.getElementById('ib-muscle')?.value;
+
+  if (!weight && !fat && !muscle) { alert('최소 하나의 수치를 입력해주세요.'); return; }
+
+  const btn = document.querySelector('#app .ai-save-btn');
+  if (btn) { btn.textContent = '저장 중...'; btn.disabled = true; }
+
+  const { error } = await db.from('body_records').upsert({
+    member_id:  member.id,
+    date:       date,
+    weight:     weight   ? +weight : null,
+    fat_pct:    fat      ? +fat    : null,
+    muscle_kg:  muscle   ? +muscle : null,
+  }, { onConflict: 'member_id,date' });
+
+  if (error) { alert('저장 오류: ' + error.message); if (btn) { btn.textContent = '💾 저장'; btn.disabled = false; } return; }
+
+  const { data } = await db.from('body_records').select('*').eq('member_id', member.id).order('date', { ascending: true }).limit(8);
+  bodyRows = data || [];
+  inbodyInputMode = 'photo';
   renderPage();
 }
 
