@@ -1332,8 +1332,7 @@ function renderLearnedExercises() {
       <button class="next-del-btn" title="삭제" onclick="deleteLearnedExercise(${i})">✕</button>
     </div>`).join('');
 
-  const dateIdx = allLearnedDates.indexOf(learnedDate);
-  const hasPrev = dateIdx < allLearnedDates.length - 1 || !allLearnedDates.includes(learnedDate);
+  const hasPrev = true;
   const hasNext = learnedDate < today();
   const navBtnStyle = 'background:none;border:none;font-size:18px;cursor:pointer;padding:0 4px;color:var(--blue);';
 
@@ -1369,17 +1368,10 @@ function deleteLearnedExercise(i) {
 }
 
 async function goLearnedDate(delta) {
-  const idx = allLearnedDates.indexOf(learnedDate);
-  let newDate;
-  if (delta === -1) {
-    if (idx === -1) newDate = allLearnedDates[0];
-    else if (idx < allLearnedDates.length - 1) newDate = allLearnedDates[idx + 1];
-    else return;
-  } else {
-    if (idx <= 0) newDate = today();
-    else newDate = allLearnedDates[idx - 1];
-  }
-  if (!newDate || newDate > today()) newDate = today();
+  const d = new Date(learnedDate);
+  d.setDate(d.getDate() + delta);
+  const newDate = d.toISOString().split('T')[0];
+  if (newDate > today()) return;
   learnedDate = newDate;
   const { data } = await db.from('learned_logs').select('*').eq('member_id', member.id).eq('date', learnedDate).maybeSingle();
   learnedExercises = data ? (data.exercises || []) : [];
