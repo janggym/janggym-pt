@@ -1042,7 +1042,8 @@ async function analyzeInbody(file) {
 }
 
 async function saveBodyRecord(date, weight, fat_pct, muscle_kg) {
-  const { data: existing } = await db.from('body_records').select('id').eq('member_id', member.id).eq('date', date).maybeSingle();
+  const { data: rows } = await db.from('body_records').select('id').eq('member_id', member.id).eq('date', date).limit(1);
+  const existing = rows?.[0] || null;
   const payload = { weight: weight ?? null, fat_pct: fat_pct ?? null, muscle_kg: muscle_kg ?? null };
   let error;
   if (existing) {
