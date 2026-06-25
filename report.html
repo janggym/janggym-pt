@@ -1086,12 +1086,25 @@ async function saveInbodyManual() {
   const btn = document.querySelector('#app .ai-save-btn');
   if (btn) { btn.textContent = '저장 중...'; btn.disabled = true; }
 
-  const error = await saveBodyRecord(date, weight ? +weight : null, fat ? +fat : null, muscle ? +muscle : null);
+  const payload = {
+    weight:    weight ? +weight : null,
+    fat_pct:   fat    ? +fat   : null,
+    muscle_kg: muscle ? +muscle : null,
+  };
+
+  let error;
+  if (inbodyManualRecord?.id) {
+    ({ error } = await db.from('body_records').update(payload).eq('id', inbodyManualRecord.id));
+  } else {
+    ({ error } = await db.from('body_records').insert({ member_id: member.id, date, ...payload }));
+  }
+
   if (error) { alert('저장 오류: ' + error.message); if (btn) { btn.textContent = '💾 저장'; btn.disabled = false; } return; }
 
   const { data } = await db.from('body_records').select('*').eq('member_id', member.id).order('date', { ascending: true }).limit(8);
   bodyRows = data || [];
   inbodyInputMode = 'photo';
+  inbodyManualRecord = null;
   renderPage();
 }
 
