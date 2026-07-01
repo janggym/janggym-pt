@@ -666,11 +666,18 @@ async function analyzeFood(file) {
 
   let result;
   try {
-    const prompt = `이 음식 사진에서 보이는 음식들의 영양 정보를 추정해줘.
-다른 설명 없이 아래 JSON 형식으로만 응답해:
-{"foods":[{"name":"음식이름","calories":숫자,"carb":숫자,"protein":숫자,"fat":숫자}],"total_calories":숫자,"total_carb":숫자,"total_protein":숫자,"total_fat":숫자}
-calories는 kcal, carb/protein/fat은 g 단위. 사진에 보이는 양 기준으로 추정.
-음식이 보이지 않으면 {"foods":[],"total_calories":0,"total_carb":0,"total_protein":0,"total_fat":0}`;
+    const prompt = `이 음식 사진의 영양 정보를 한국 식품영양성분 데이터베이스(농촌진흥청 표준식품성분표) 기준으로 정확하게 추정해줘.
+
+중요 원칙:
+- 지방(fat)은 조리유/드레싱/버터/마요네즈 등이 명확히 보일 때만 추가하고, 과대 추정 금지
+- 눈에 보이는 실제 양 기준으로 g 단위 계산 (예: 밥 1공기=200g, 김치 한 젓가락=20g)
+- 튀김/부침이 아니면 조리유는 최소로 반영
+- 육류/생선은 살코기 부위 지방 함량으로 계산 (닭가슴살은 100g당 지방 1g, 삼겹살은 100g당 지방 28g 등)
+- 애매하면 낮은 값으로 추정
+
+다른 설명 없이 아래 JSON 형식으로만 응답:
+{"foods":[{"name":"음식이름(양포함)","calories":숫자,"carb":숫자,"protein":숫자,"fat":숫자}],"total_calories":숫자,"total_carb":숫자,"total_protein":숫자,"total_fat":숫자}
+calories는 kcal, carb/protein/fat은 g. 음식이 안 보이면 모두 0.`;
     const text = await callGemini([
       { text: prompt },
       { inline_data: { mime_type: file.type || 'image/jpeg', data: base64 } },
@@ -702,10 +709,18 @@ async function analyzeFoodText() {
 
   let result;
   try {
-    const prompt = `다음 음식의 영양 정보를 추정해줘: "${text}"
-다른 설명 없이 아래 JSON 형식으로만 응답해:
-{"foods":[{"name":"음식이름","calories":숫자,"carb":숫자,"protein":숫자,"fat":숫자}],"total_calories":숫자,"total_carb":숫자,"total_protein":숫자,"total_fat":숫자}
-calories는 kcal, carb/protein/fat은 g 단위. 입력된 양 기준으로 추정.`;
+    const prompt = `다음 음식의 영양 정보를 한국 식품영양성분 데이터베이스(농촌진흥청 표준식품성분표) 기준으로 정확하게 추정해줘: "${text}"
+
+중요 원칙:
+- 지방(fat)은 조리유/드레싱/버터/마요네즈 등이 명시된 경우에만 추가하고, 과대 추정 금지
+- 입력된 양 기준으로 g 단위 계산
+- 튀김/부침이 아니면 조리유는 최소로 반영
+- 육류/생선은 살코기 부위 지방 함량으로 계산 (닭가슴살 100g당 지방 1g, 삼겹살 100g당 지방 28g 등)
+- 양이 명시되지 않으면 1인분 기준
+
+다른 설명 없이 아래 JSON 형식으로만 응답:
+{"foods":[{"name":"음식이름(양포함)","calories":숫자,"carb":숫자,"protein":숫자,"fat":숫자}],"total_calories":숫자,"total_carb":숫자,"total_protein":숫자,"total_fat":숫자}
+calories는 kcal, carb/protein/fat은 g.`;
     const rawText = await callGemini([{ text: prompt }]);
     const match = rawText.match(/\{[\s\S]*\}/);
     result = JSON.parse(match ? match[0] : rawText);
